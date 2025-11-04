@@ -1,0 +1,110 @@
+# ===========================================================
+# backend/routers/run.py — BST Run Router
+# -----------------------------------------------------------
+# Manages creation, listing, and timing (start/end) of runs.
+# Each run links a driver, route, and run_type (AM, MIDDAY, PM, EXTRA).
+# ===========================================================
+
+from fastapi import APIRouter, Depends, HTTPException, status  # FastAPI helpers
+from sqlalchemy.orm import Session                              # Database session
+from datetime import datetime                                   # For timestamps
+from typing import List                                          # For list responses
+from database import get_db                                      # DB dependency
+from backend import schemas                                      # Pydantic schemas
+from backend.models import run as run_model                      # Run model
+from backend.models import driver as driver_model                # Driver model
+from backend.models import route as route_model                  # Route model
+
+# -----------------------------------------------------------
+# Router setup
+# -----------------------------------------------------------
+router = APIRouter(
+    prefix="/runs",    # Base URL path
+    tags=["Runs"]      # Swagger section title
+)
+
+# -----------------------------------------------------------
+# POST /runs → Manually create a run (optional)
+# -----------------------------------------------------------
+@router.post("/", response_model=schemas.RunOut, status_code=status.HTTP_201_CREATED)
+def create_run(run: schemas.RunCreate, db: Session = Depends(get_db)):
+    """Create a new run manually (usually handled automatically)."""
+    driver = db.get(driver_model.Driver, run.driver_id)
+    if not driver:
+        raise HTTPException(status_code=404, detail="Driver not found")
+
+    route = db.get(route_model.Route, run.route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Route not found")
+
+    new_run = run_model.Run(**run.model_dump())
+    db.add(new_run)
+    db.commit()
+    db.refresh(new_run)
+    return new_run
+
+# -----------------------------------------------------------
+# POST /runs/start → Driver starts a run
+# -----------------------------------------------------------
+@router.post("/start", response_model=schemas.RunOut)
+def start_run(
+    driver_id: int,
+    route_id: int,
+    run_type: run_model.RunType,
+    db: Session = Depends(get_db)
+):
+    """Start a run and log its start time."""
+    # Validate driver and route
+    driver = db.get(driver_model.Driver, driver_id)
+    route = db.get(route_model.Route, route_id)
+    if not driver or not route:
+        raise HTTPException(status_code=404, detail="Driver or Route not found")
+
+    # Create new run record with start_time
+    run = run_model.Run(
+        driver_id=driver_id,
+        route_id=route_id,
+        run_type=run_type,
+        start_time=datetime.utcnow()
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return run
+
+# -----------------------------------------------------------
+# POST /runs/end → Driver ends an ongoing run
+# -----------------------------------------------------------
+@router.post("/end", response_model=schemas.RunOut)
+def end_run(run_id: int, db: Session = Depends(get_db)):
+    """End a run by recording the current UTC time."""
+    run = db.get(run_model.Run, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.end_time:
+        raise HTTPException(status_code=400, detail="Run already ended")
+
+    # Record end time
+    run.end_time = datetime.utcnow()
+    db.commit()
+    db.refresh(run)
+    return run
+
+# -----------------------------------------------------------
+# GET /runs → Retrieve all runs
+# -----------------------------------------------------------
+@router.get("/", response_model=List[schemas.RunOut])
+def get_all_runs(db: Session = Depends(get_db)):
+    """List all runs for all drivers and routes."""
+    return db.query(run_model.Run).all()
+
+# -----------------------------------------------------------
+# GET /runs/{run_id} → Retrieve one run
+# -----------------------------------------------------------
+@router.get("/{run_id}", response_model=schemas.RunOut)
+def get_run(run_id: int, db: Session = Depends(get_db)):
+    """Retrieve details for a specific run."""
+    run = db.get(run_model.Run, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run

@@ -1,0 +1,64 @@
+<!-- ===========================================================
+     backend/templates/dashboard.html — SBT Dashboard Template
+     -----------------------------------------------------------
+     Purpose: Displays system overview and navigation links to
+     other report pages (route report, summary report, etc.)
+     =========================================================== -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SBT Dashboard</title>
+  <!-- Basic styling for layout -->
+  <style>
+    body {
+      font-family: Arial, sans-serif; /* Clean readable font */
+      background-color: #f8f9fa; /* Light gray background */
+      margin: 40px;
+    }
+    h1 {
+      text-align: center; /* Center title */
+      color: #333; /* Dark gray for readability */
+    }
+    .summary {
+      margin: 30px auto;
+      max-width: 600px; /* Restrict width for clean look */
+      background: white;
+      padding: 20px;
+      border-radius: 8px; /* Rounded edges */
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .summary p {
+      font-size: 16px;
+      margin: 8px 0;
+    }
+    a {
+      display: inline-block;
+      margin-top: 15px;
+      text-decoration: none;
+      color: white;
+      background: #007BFF; /* Blue button */
+      padding: 10px 20px;
+      border-radius: 6px;
+    }
+    a:hover {
+      background: #0056b3; /* Darker on hover */
+    }
+  </style>
+</head>
+<body>
+  <!-- Page Title -->
+  <h1>School Bus Tracking Dashboard</h1>
+  <!-- Summary container -->
+  <div class="summary">
+    <p><strong>Drivers:</strong> {{ driver_count }}</p>
+    <p><strong>Schools:</strong> {{ school_count }}</p>
+    <p><strong>Routes:</strong> {{ route_count }}</p>
+    <p><strong>Students:</strong> {{ student_count }}</p>
+    <p><strong>Active Runs:</strong> {{ run_count }}</p>
+    <!-- Navigation links -->
+    <a href="/route_report">View Route Report</a>
+    <a href="/summary_report">View Summary Report</a>
+  </div>
+</body>
+</html>

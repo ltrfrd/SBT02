@@ -1,0 +1,196 @@
+<!-- ===========================================================
+     backend/templates/route_report.html — SBT Route Report Template
+     -----------------------------------------------------------
+     Purpose: Displays detailed information for a single route:
+     - Route number, driver, schools, stops, students, total runs
+     =========================================================== -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Route Report — {{ route.unit_number or route.route_number }}</title>
+
+  <!-- Inline CSS for a clean, responsive report view -->
+  <style>
+    body {
+      font-family: Arial, sans-serif;           /* Simple readable font */
+      background-color: #f4f6f9;                /* Light neutral background */
+      margin: 40px;
+      color: #333;                              /* Default text color */
+    }
+
+    h1 {
+      text-align: center;                       /* Center main title */
+      color: #2c3e50;                           /* Darker tone for emphasis */
+    }
+
+    .container {
+      max-width: 900px;                         /* Constrain width for readability */
+      margin: 20px auto;                        /* Center horizontally */
+      background: white;
+      padding: 25px;
+      border-radius: 10px;                      /* Rounded corners */
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);   /* Subtle drop shadow */
+    }
+
+    .info {
+      display: grid;                            /* Two-column info layout */
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 25px;
+      font-size: 16px;
+    }
+
+    .info div {
+      background: #f8f9fa;                      /* Light box for clarity */
+      padding: 12px;
+      border-radius: 6px;
+    }
+
+    .section {
+      margin-top: 30px;                         /* Space between sections */
+    }
+
+    .section h2 {
+      border-bottom: 2px solid #007BFF;         /* Blue underline for headers */
+      padding-bottom: 8px;
+      color: #007BFF;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;                /* Remove double borders */
+      margin-top: 15px;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;            /* Row separators */
+    }
+
+    th {
+      background-color: #007BFF;                /* Blue header */
+      color: white;
+    }
+
+    tr:hover {
+      background-color: #f1f1f1;                /* Highlight row on hover */
+    }
+
+    .back {
+      display: inline-block;
+      margin-top: 20px;
+      text-decoration: none;
+      color: white;
+      background: #28a745;                      /* Green button */
+      padding: 10px 20px;
+      border-radius: 6px;
+    }
+
+    .back:hover {
+      background: #218838;                      /* Darker hover state */
+    }
+  </style>
+</head>
+<body>
+  <!-- Main heading -->
+  <h1>Route Report: {{ route.unit_number or route.route_number }}</h1>
+
+  <div class="container">
+    <!-- High-level route info summary -->
+    <div class="info">
+      <div><strong>Driver:</strong> {{ driver_name or "Not Assigned" }}</div>
+      <div><strong>Total Runs:</strong> {{ route.num_runs }}</div>
+      <div><strong>Schools:</strong> {{ route.schools|length }}</div>
+      <div><strong>Students:</strong> {{ route.students|length }}</div>
+    </div>
+
+    <!-- Section: Assigned schools -->
+    <div class="section">
+      <h2>Assigned Schools</h2>
+      {% if route.schools %}
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Address</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for school in route.schools %}
+          <tr>
+            <td>{{ school.id }}</td>
+            <td>{{ school.name }}</td>
+            <td>{{ school.address }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p><em>No schools assigned.</em></p>
+      {% endif %}
+    </div>
+
+    <!-- Section: Stops list -->
+    <div class="section">
+      <h2>Stops ({{ route.stops|length }})</h2>
+      {% if route.stops %}
+      <table>
+        <thead>
+          <tr>
+            <th>Sequence</th>
+            <th>Type</th>
+            <th>Students</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for stop in route.stops %}
+          <tr>
+            <td>{{ stop.sequence }}</td>
+            <td>{{ stop.type }}</td>
+            <td>{{ stop.students|length }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p><em>No stops defined.</em></p>
+      {% endif %}
+    </div>
+
+    <!-- Section: Students on route -->
+    <div class="section">
+      <h2>Students ({{ route.students|length }})</h2>
+      {% if route.students %}
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Grade</th>
+            <th>Stop</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for student in route.students %}
+          <tr>
+            <td>{{ student.id }}</td>
+            <td>{{ student.name }}</td>
+            <td>{{ student.grade or "—" }}</td>
+            <td>{{ student.stop.sequence if student.stop else "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p><em>No students assigned.</em></p>
+      {% endif %}
+    </div>
+
+    <!-- Navigation back to dashboard -->
+    <a href="/dashboard" class="back">← Back to Dashboard</a>
+  </div>
+</body>
+</html>

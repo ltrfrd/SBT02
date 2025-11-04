@@ -1,0 +1,164 @@
+<!-- ===========================================================
+     backend/templates/summary_report.html — SBT Summary Report
+     -----------------------------------------------------------
+     Purpose: Displays payroll summary for all drivers in a date range.
+     Shows approved/pending days, charter hours, and totals.
+     =========================================================== -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Payroll Summary Report</title>
+
+  <!-- Inline CSS for simple, readable styling -->
+  <style>
+    body {
+      font-family: Arial, sans-serif;        /* Clean font */
+      background-color: #f4f6f9;             /* Light neutral background */
+      margin: 40px;
+      color: #333;                           /* Standard text color */
+    }
+
+    h1 {
+      text-align: center;                    /* Centered title */
+      color: #2c3e50;                        /* Darker heading */
+    }
+
+    .container {
+      max-width: 1000px;                     /* Constrain width for desktop readability */
+      margin: 20px auto;                     /* Center horizontally */
+      background: white;
+      padding: 25px;
+      border-radius: 10px;                   /* Rounded corners */
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);/* Subtle drop shadow */
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #007BFF;      /* Blue underline separator */
+    }
+
+    .date-range {
+      font-size: 18px;
+      color: #555;
+    }
+
+    .totals {
+      display: flex;                         /* Inline block summary layout */
+      justify-content: space-around;
+      margin: 20px 0;
+      padding: 15px;
+      background: #e9ecef;                   /* Soft gray background */
+      border-radius: 8px;
+      font-weight: bold;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;             /* Remove double borders */
+      margin-top: 20px;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;         /* Row separation */
+    }
+
+    th {
+      background-color: #007BFF;             /* Blue header bar */
+      color: white;
+    }
+
+    tr:hover {
+      background-color: #f8f9fa;             /* Light hover highlight */
+    }
+
+    .approved {
+      color: #28a745;                        /* Green for approved */
+      font-weight: bold;
+    }
+
+    .pending {
+      color: #dc3545;                        /* Red for pending */
+      font-weight: bold;
+    }
+
+    .back {
+      display: inline-block;
+      margin-top: 25px;
+      text-decoration: none;
+      color: white;
+      background: #28a745;                   /* Green navigation button */
+      padding: 10px 20px;
+      border-radius: 6px;
+    }
+
+    .back:hover {
+      background: #218838;                   /* Darker hover tone */
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Main title -->
+  <h1>Payroll Summary Report</h1>
+
+  <div class="container">
+    <!-- Header section: date range and top metrics -->
+    <div class="header">
+      <div class="date-range">
+        <strong>Period:</strong> {{ start_date }} to {{ end_date }}
+      </div>
+
+      <!-- Key totals for quick summary -->
+      <div class="totals">
+        <div>Total Drivers: {{ total_drivers }}</div>
+        <div>Approved Days: {{ approved_days }}</div>
+        <div>Pending Days: {{ pending_days }}</div>
+        <div>Total Charter Hours: {{ total_charter_hours }}</div>
+      </div>
+    </div>
+
+    <!-- Payroll Table -->
+    <table>
+      <thead>
+        <tr>
+          <th>Driver ID</th>
+          <th>Date</th>
+          <th>Charter Hours</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in records %}
+        <tr>
+          <td>{{ record.driver_id }}</td>                   <!-- ID of the driver -->
+          <td>{{ record.work_date }}</td>                   <!-- Work date -->
+          <td>{{ "%.2f"|format(record.charter_hours) }}</td><!-- Hours formatted with 2 decimals -->
+          <td>
+            {% if record.approved %}
+              <span class="approved">Approved</span>        <!-- Green text -->
+            {% else %}
+              <span class="pending">Pending</span>          <!-- Red text -->
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <!-- Fallback when no records exist -->
+        <tr>
+          <td colspan="4" style="text-align:center; color:#777;">
+            No payroll records in this date range.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Navigation back to dashboard -->
+    <a href="/dashboard" class="back">← Back to Dashboard</a>
+  </div>
+</body>
+</html>
