@@ -11,6 +11,7 @@ from backend import schemas
 from backend.models import driver as driver_model
 from backend.models import run as run_model
 from datetime import datetime
+from backend.schemas.driver import DriverUpdate
 
 # -----------------------------------------------------------
 # Router setup
@@ -52,12 +53,19 @@ def get_driver(driver_id: int, db: Session = Depends(get_db)):
 # UPDATE: Modify driver
 # -----------------------------------------------------------
 @router.put("/{driver_id}", response_model=schemas.DriverOut)
-def update_driver(driver_id: int, driver_in: schemas.DriverCreate, db: Session = Depends(get_db)):
+def update_driver(
+    driver_id: int,
+    driver_in: DriverUpdate,
+    db: Session = Depends(get_db)
+):
     driver = db.get(driver_model.Driver, driver_id)
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found")
-    for key, value in driver_in.model_dump().items():
+
+    update_data = driver_in.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
         setattr(driver, key, value)
+
     db.commit()
     db.refresh(driver)
     return driver

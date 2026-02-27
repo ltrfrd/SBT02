@@ -14,6 +14,8 @@ from backend import schemas                                      # Pydantic sche
 from backend.models import run as run_model                      # Run model
 from backend.models import driver as driver_model                # Driver model
 from backend.models import route as route_model                  # Route model
+from backend.schemas.run import RunStart, RunOut
+from backend.models.run import Run
 
 # -----------------------------------------------------------
 # Router setup
@@ -27,7 +29,8 @@ router = APIRouter(
 # POST /runs → Manually create a run (optional)
 # -----------------------------------------------------------
 @router.post("/", response_model=schemas.RunOut, status_code=status.HTTP_201_CREATED)
-def create_run(run: schemas.RunCreate, db: Session = Depends(get_db)):
+def create_run(run: schemas.RunStart, db: Session = Depends(get_db)):
+
     """Create a new run manually (usually handled automatically)."""
     driver = db.get(driver_model.Driver, run.driver_id)
     if not driver:
@@ -44,33 +47,34 @@ def create_run(run: schemas.RunCreate, db: Session = Depends(get_db)):
     return new_run
 
 # -----------------------------------------------------------
-# POST /runs/start → Driver starts a run
+# POST /runs/start → Start a run (matches tests)
 # -----------------------------------------------------------
-@router.post("/start", response_model=schemas.RunOut)
-def start_run(
-    driver_id: int,
-    route_id: int,
-    run_type: run_model.RunType,
-    db: Session = Depends(get_db)
-):
-    """Start a run and log its start time."""
-    # Validate driver and route
-    driver = db.get(driver_model.Driver, driver_id)
-    route = db.get(route_model.Route, route_id)
+
+# POST /runs/start → Start a run (matches tests)
+# -----------------------------------------------------------
+
+from backend.schemas.run import RunStart, RunOut
+
+@router.post("/start", response_model=RunOut)
+def start_run(run: RunStart, db: Session = Depends(get_db)):
+    driver = db.get(driver_model.Driver, run.driver_id)
+    route = db.get(route_model.Route, run.route_id)
+
     if not driver or not route:
         raise HTTPException(status_code=404, detail="Driver or Route not found")
 
-    # Create new run record with start_time
-    run = run_model.Run(
-        driver_id=driver_id,
-        route_id=route_id,
-        run_type=run_type,
-        start_time=datetime.utcnow()
+    new_run = run_model.Run(
+        driver_id=run.driver_id,
+        route_id=run.route_id,
+        run_type=run.run_type,
+        start_time=datetime.utcnow(),
     )
-    db.add(run)
+
+    db.add(new_run)
     db.commit()
-    db.refresh(run)
-    return run
+    db.refresh(new_run)
+    return new_run   # ✅ REMOVE THE DOT
+
 
 # -----------------------------------------------------------
 # POST /runs/end → Driver ends an ongoing run

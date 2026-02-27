@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session         # Database session for ORM
 from datetime import datetime, date        # For timestamps and date filters
 import json                                # Parse JSON payloads
 from typing import Dict, List              # Type hints for dictionaries/lists
-
+from fastapi import Body
 # ---------- DB & MODELS ----------
 from database import get_db, engine, Base   # Local database setup (SQLAlchemy)
 from backend import schemas                 # Import Pydantic schemas
@@ -251,9 +251,14 @@ def summary_report(request: Request, start: date = None, end: date = None, db: S
 # -----------------------------------------------------------
 # LOGIN / LOGOUT ENDPOINTS
 # -----------------------------------------------------------
+from fastapi import Request, Form, HTTPException, Depends
+from sqlalchemy.orm import Session
+from backend.models import driver as driver_model
+from database import get_db
+
 @app.post("/login")
-def login(driver_id: int, db: Session = Depends(get_db), request: Request = None):
-    """Logs a driver into the session."""
+def login(payload: dict = Body(...), request: Request = None, db: Session = Depends(get_db)):
+    driver_id = int(payload["driver_id"])
     driver = db.get(driver_model.Driver, driver_id)
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found")
