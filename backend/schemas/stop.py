@@ -8,6 +8,8 @@
 from pydantic import BaseModel, ConfigDict
 from enum import Enum
 
+
+
 # -----------------------------------------------------------
 # Stop type enum: pickup or dropoff
 # -----------------------------------------------------------
@@ -23,6 +25,10 @@ class StopCreate(BaseModel):
     type: StopType           # Either pickup or dropoff
     route_id: int            # FK: route this stop belongs to
 
+    name: str | None = None
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 # -----------------------------------------------------------
 # Schema for returning stop data (GET response)
 # -----------------------------------------------------------
@@ -31,5 +37,8 @@ class StopOut(BaseModel):
     sequence: int            # Stop number on the route
     type: StopType           # pickup/dropoff
     route_id: int            # Linked route ID
-
+    name: str | None = None
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     model_config = ConfigDict(from_attributes=True)

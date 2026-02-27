@@ -4,10 +4,12 @@
 # Defines the Stop table using numeric order instead of names.
 # Each stop belongs to a route and can be pickup or dropoff.
 # ===========================================================
-from sqlalchemy import Column, Integer, ForeignKey, Enum
+from sqlalchemy import Column, Integer, ForeignKey, Enum, String, Float
 from sqlalchemy.orm import relationship
 from database import Base  # Root-level
 import enum
+
+
 
 # -----------------------------------------------------------
 # Stop type enum: pickup or dropoff
@@ -27,6 +29,10 @@ class Stop(Base):
     type = Column(Enum(StopType), nullable=False)       # Stop type (pickup/dropoff)
     route_id = Column(Integer, ForeignKey("routes.id"), nullable=False)  # Linked route
 
+    name = Column(String(100), nullable=True)
+    address = Column(String(255), nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     # -------------------------------------------------------
     # Relationships
     # -------------------------------------------------------
