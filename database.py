@@ -1,55 +1,81 @@
 # ===========================================================
-# database.py
+# database.py — Database Configuration (SBT01)
 # -----------------------------------------------------------
-# Database configuration for BST
-# Creates SQLAlchemy engine, session factory, and Base class.
+# Responsibilities:
+#   - Load environment variables
+#   - Create SQLAlchemy engine
+#   - Provide SessionLocal session factory
+#   - Provide Base for ORM models
+#   - Provide get_db() dependency for FastAPI
 # ===========================================================
 
-from sqlalchemy import create_engine              # Core SQLAlchemy function for DB engine
-from sqlalchemy.ext.declarative import declarative_base  # Base class for ORM models
-from sqlalchemy.orm import sessionmaker           # Factory for database sessions
-from dotenv import load_dotenv                    # Loads .env file variables
-import os                                         # Access environment variables
+from __future__ import annotations                         # Forward refs for typing
 
 # -----------------------------------------------------------
-# Load environment variables from .env
+# Standard library
 # -----------------------------------------------------------
-load_dotenv()  # Reads .env and adds keys to os.environ
+import os                                                   # Environment variables
+from typing import Generator                                # Generator typing
 
 # -----------------------------------------------------------
-# Get database URL from environment or default to SQLite
+# Third-party
 # -----------------------------------------------------------
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sbt.db")
+from dotenv import load_dotenv                              # Load .env into os.environ
+from sqlalchemy import create_engine                         # Create DB engine
+from sqlalchemy.ext.declarative import declarative_base      # Base class for ORM models
+from sqlalchemy.orm import sessionmaker                      # Session factory
+
 
 # -----------------------------------------------------------
-# Create database engine
-# connect_args={"check_same_thread": False} is required for SQLite
-# (other databases like PostgreSQL don’t need this)
+# Environment
+# -----------------------------------------------------------
+load_dotenv()                                               # Read .env and populate os.environ
+
+
+# -----------------------------------------------------------
+# Database URL
+# -----------------------------------------------------------
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sbt.db")  # Default SQLite path
+
+
+# -----------------------------------------------------------
+# Engine
+# - SQLite needs check_same_thread=False
+# - Other DBs (PostgreSQL) do not
 # -----------------------------------------------------------
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
 )
 
-# -----------------------------------------------------------
-# Create a configured session factory
-# Each request gets its own database session
-# -----------------------------------------------------------
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # -----------------------------------------------------------
-# Base class for all ORM models
-# Each model will inherit from this
+# Session factory
+# - autocommit=False: explicit commit control
+# - autoflush=False: predictable flush behavior
+# -----------------------------------------------------------
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
+
+
+# -----------------------------------------------------------
+# Base
+# - All ORM models inherit from Base
 # -----------------------------------------------------------
 Base = declarative_base()
 
+
 # -----------------------------------------------------------
-# Dependency for FastAPI routes
-# Used with Depends(get_db) to provide a session per request
+# get_db
+# - FastAPI dependency: yields a DB session per request
+# - Ensures session is always closed
 # -----------------------------------------------------------
-def get_db():
-    db = SessionLocal()       # Create a new DB session
+def get_db() -> Generator:
+    db = SessionLocal()                                     # Create new DB session
     try:
-        yield db              # Provide session to route logic
+        yield db                                            # Provide session to route logic
     finally:
-        db.close()            # Close session after use
+        db.close()                                          # Always close session

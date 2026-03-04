@@ -1,15 +1,40 @@
 # ===========================================================
-# backend/config.py — Application Configuration
+# backend/config.py — App Settings (SBT01)
 # -----------------------------------------------------------
-# Central place for environment-based settings.
+# Responsibilities:
+#   - Centralize environment-driven settings
+#   - Keep dev flags (DEBUG) in one place
+#   - Provide a single `settings` object for imports
 # ===========================================================
 
-import os                                                   # Access environment variables
+from __future__ import annotations                         # Forward refs for typing
+
+# -----------------------------------------------------------
+# Standard library
+# -----------------------------------------------------------
+import os                                                   # Environment variables
 
 
+# -----------------------------------------------------------
+# Settings
+# -----------------------------------------------------------
 class Settings:
-    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"   # Development flag
-    ENV: str = os.getenv("ENV", "development")                   # Environment name
+    # -------------------------------------------------------
+    # DEBUG
+    # - true  => dev-only endpoints allowed
+    # - false => dev-only endpoints blocked
+    # -------------------------------------------------------
+    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"  # Default true for dev
+
+    # -------------------------------------------------------
+    # ENV
+    # - Optional environment name (dev/staging/prod)
+    # -------------------------------------------------------
+    ENV: str = os.getenv("ENV", "dev")                      # Default environment label
 
 
-settings = Settings()                                       # Singleton settings object
+# -----------------------------------------------------------
+# Singleton settings instance
+# - Import as: from backend.config import settings
+# -----------------------------------------------------------
+settings = Settings()                                       # Create settings once
