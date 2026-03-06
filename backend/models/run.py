@@ -1,17 +1,9 @@
-# ===========================================================
-# backend/models/run.py — BST Run Model
-# -----------------------------------------------------------
-# Defines a single bus run (AM or PM) with driver, route, and timing
-# ===========================================================
 from sqlalchemy import Column, Integer, ForeignKey, DateTime, Enum
 from sqlalchemy.orm import relationship
-from database import Base  # Root-level
+from database import Base
 import enum
 
 
-# -----------------------------------------------------------
-# Run type enum: AM or PM
-# -----------------------------------------------------------
 class RunType(str, enum.Enum):
     AM = "AM"
     MIDDAY = "MIDDAY"
@@ -19,21 +11,21 @@ class RunType(str, enum.Enum):
     EXTRA = "EXTRA"
 
 
-# -----------------------------------------------------------
-# Run model
-# -----------------------------------------------------------
 class Run(Base):
     __tablename__ = "runs"
 
     id = Column(Integer, primary_key=True, index=True)
     driver_id = Column(Integer, ForeignKey("drivers.id"), nullable=False)
     route_id = Column(Integer, ForeignKey("routes.id"), nullable=False)
-    run_type = Column(Enum(RunType), nullable=False)  # AM or PM
-    start_time = Column(DateTime, nullable=False)  # Actual start time
-    end_time = Column(DateTime)  # Actual end time (nullable until completed)
+    run_type = Column(Enum(RunType), nullable=False)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime)
 
-    # -------------------------------------------------------
-    # Relationships
-    # -------------------------------------------------------
     driver = relationship("Driver", back_populates="runs")
     route = relationship("Route", back_populates="runs")
+    stops = relationship("Stop", back_populates="run", cascade="all, delete-orphan")
+    student_assignments = relationship(
+        "StudentRunAssignment",
+        back_populates="run",
+        cascade="all, delete-orphan",
+    )

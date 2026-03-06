@@ -1,100 +1,36 @@
-# ===========================================================  # File header
-# backend/models/stop.py — BST Stop Model                      # File path + purpose
-# -----------------------------------------------------------  # Separator
-# Defines the Stop table using numeric order instead of names.  # Model summary
-# Each stop belongs to a route and can be pickup or dropoff.    # Ownership + type
-# ===========================================================  # Separator
-
-from sqlalchemy import (
-    Column,
-    Integer,
-    ForeignKey,
-    Enum,
-    String,
-    Float,
-    Index,
-    Time, 
-)  # Add Index for DB performance
-from sqlalchemy.orm import relationship  # SQLAlchemy relationships
-from database import Base  # Root-level import
-import enum  # Python enum
+from sqlalchemy import Column, Integer, ForeignKey, Enum, String, Float, Index, Time, UniqueConstraint
+from sqlalchemy.orm import relationship
+from database import Base
+import enum
 
 
-# -----------------------------------------------------------  # Separator
-# Stop type enum: pickup or dropoff                            # Enum purpose
-# -----------------------------------------------------------  # Separator
-class StopType(str, enum.Enum):  # Enum class
-    PICKUP = "pickup"  # Pickup stop
-    DROPOFF = "dropoff"  # Dropoff stop
-
-
-# -----------------------------------------------------------  # Separator
-# Stop model                                                   # Model purpose
-# -----------------------------------------------------------  # Separator
-class Stop(Base):  # ORM model
-    __tablename__ = "stops"  # DB table name
-
-    __table_args__ = (  # Table-level DB options
-        Index(
-            "ix_stops_route_id_sequence", "route_id", "sequence"
-        ),  # Speeds up route filter + ordering
-    )  # End table args
-
-    id = Column(Integer, primary_key=True, index=True)  # Unique stop ID
-    sequence = Column(Integer, nullable=False)  # Numeric order (1, 2, 3...)
-    type = Column(Enum(StopType), nullable=False)  # Stop type (pickup/dropoff)
-    route_id = Column(Integer, ForeignKey("routes.id"), nullable=False)  # Linked route
-    name = Column(String(100), nullable=True)  # Optional stop label
-    address = Column(String(255), nullable=True)  # Optional stop address
-    latitude = Column(Float, nullable=True)  # Optional latitude
-    longitude = Column(Float, nullable=True)  # Optional longitude
-
-    # -------------------------------------------------------  # Separator
-    # Relationships                                            # Relationship group
-    # -------------------------------------------------------  # Separator
-    route = relationship(
-        "Route", back_populates="stops"
-    )  # Each stop belongs to one route
-    students = relationship(
-        "Student", back_populates="stop"
-    )  # Students linked to this stop
-
-
-# -----------------------------------------------------------
-# Stop type enum: pickup or dropoff
-# -----------------------------------------------------------
 class StopType(str, enum.Enum):
-    PICKUP = "pickup"   # Pickup stop
-    DROPOFF = "dropoff" # Dropoff stop
+    PICKUP = "pickup"
+    DROPOFF = "dropoff"
 
 
-# -----------------------------------------------------------
-# Stop model
-# -----------------------------------------------------------
 class Stop(Base):
-    __tablename__ = "stops"  # DB table name
+    __tablename__ = "stops"
 
     __table_args__ = (
-        Index(
-            "ix_stops_route_id_sequence",
-            "route_id",
-            "sequence",
-        ),  # Speeds up route filter + ordering
+        UniqueConstraint("run_id", "sequence", name="uq_stops_run_sequence"),
+        Index("ix_stops_run_id_sequence", "run_id", "sequence"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)             # Unique stop ID
-    sequence = Column(Integer, nullable=False)                     # True stop order on the route
-    type = Column(Enum(StopType), nullable=False)                  # pickup or dropoff
-    route_id = Column(Integer, ForeignKey("routes.id"), nullable=False)  # Linked route
+    id = Column(Integer, primary_key=True, index=True)
+    sequence = Column(Integer, nullable=False)
+    type = Column(Enum(StopType), nullable=False)
+    run_id = Column(Integer, ForeignKey("runs.id"), nullable=False)
+    name = Column(String(100), nullable=True)
+    address = Column(String(255), nullable=True)
+    planned_time = Column(Time, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
 
-    name = Column(String(100), nullable=True)                      # Optional stop label
-    address = Column(String(255), nullable=True)                   # Optional stop address
-    planned_time = Column(Time, nullable=True)                     # Scheduled time shown on running board
-    latitude = Column(Float, nullable=True)                        # Optional latitude
-    longitude = Column(Float, nullable=True)                       # Optional longitude
-
-    # -------------------------------------------------------
-    # Relationships
-    # -------------------------------------------------------
-    route = relationship("Route", back_populates="stops")          # Each stop belongs to one route
-    students = relationship("Student", back_populates="stop")      # Students linked to this stop
+    run = relationship("Run", back_populates="stops")
+    students = relationship("Student", back_populates="stop")
+    student_assignments = relationship(
+        "StudentRunAssignment",
+        back_populates="stop",
+        cascade="all, delete-orphan",
+    )

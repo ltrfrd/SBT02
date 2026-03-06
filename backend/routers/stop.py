@@ -1,206 +1,124 @@
-# ===========================================================
-# backend/routers/stop.py — BST Stop Router
-# -----------------------------------------------------------
-# Handles CRUD for bus stops (pickup/dropoff) per route.
-# - Enforces UNIQUE(route_id, sequence) with safe shifting
-# - Supports append, insert, reorder, delete + normalize
-# ===========================================================
-# -----------------------------------------------------------
-# Imports
-# -----------------------------------------------------------
-from typing import List  # List typing
+from typing import List
 
-from fastapi import APIRouter  # Router
-from fastapi import Depends  # Dependency injection
-from fastapi import HTTPException  # HTTP errors
-from fastapi import status  # Status codes
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
-from sqlalchemy import func  # SQL MAX()
-from sqlalchemy import update  # Bulk UPDATE
-from sqlalchemy.exc import IntegrityError  # DB constraint errors
-from sqlalchemy.orm import Session  # DB session type
-
-from database import get_db  # DB dependency
-
-from backend.deps.admin import require_admin  # Admin dependency (used in Step 4B)
-
-from backend.models import stop as stop_model  # Stop model module
-from backend.models.stop import Stop  # Stop model class (normalize query)
-
-from backend.schemas.stop import StopCreate  # Create schema
-from backend.schemas.stop import StopOut  # Output schema
-from backend import schemas  # Other stop schemas (StopUpdate/StopReorder)
-
-from backend.utils.db_errors import raise_conflict_if_unique  # 409 on UNIQUE violation
-from backend.schemas.stop import StopUpdate  # Schema used for partial stop updates (PUT /stops/{id})
-# --- Stop Schemas (direct imports to avoid __init__ re-export dependency) ---
-from backend.schemas.stop import StopUpdate  # Schema used for partial stop updates (drag pin / PATCH-like PUT)
-from backend.schemas.stop import StopReorder  # Schema used for reordering stops (PUT /stops/{id}/reorder)
-# -----------------------------------------------------------
-# Router setup
-# -----------------------------------------------------------
-router = APIRouter(  # Router instance
-    prefix="/stops", tags=["Stops"]  # All endpoints under /stops  # Swagger group label
-)
+from database import get_db
+from backend.deps.admin import require_admin
+from backend.models import stop as stop_model
+from backend.models import run as run_model
+from backend.models.stop import Stop
+from backend.schemas.stop import StopCreate, StopOut, StopUpdate, StopReorder
+from backend.utils.db_errors import raise_conflict_if_unique
 
 
-# -----------------------------------------------------------
-# Safe block shifting helpers (collision-safe with UNIQUE(route_id, sequence))
-# - Phase 1: move affected block into safe zone (+OFFSET)
-# - Phase 2: bring back with final +/- shift applied
-# - Uses bulk SQL UPDATE with synchronize_session=False (prevents ORM collisions)
-# -----------------------------------------------------------
-SHIFT_OFFSET = 100000  # Large offset to avoid collisions inside a route
+router = APIRouter(prefix="/stops", tags=["Stops"])
+
+SHIFT_OFFSET = 100000
 
 
-def shift_block_up(db: Session, route_id: int, start_seq: int, end_seq: int) -> None:
-    """Shift stops in range [start_seq..end_seq] down by +1 (increase sequence)."""
-    if start_seq > end_seq:  # Invalid range => nothing to do
-        return  # Exit early
+def shift_block_up(db: Session, run_id: int, start_seq: int, end_seq: int) -> None:
+    if start_seq > end_seq:
+        return
 
-    db.execute(  # Phase 1: move block into safe zone
-        update(stop_model.Stop)  # UPDATE stops
-        .where(stop_model.Stop.route_id == route_id)  # Only this route
-        .where(stop_model.Stop.sequence >= start_seq)  # Start of impacted block
-        .where(stop_model.Stop.sequence <= end_seq)  # End of impacted block
-        .values(
-            sequence=stop_model.Stop.sequence + SHIFT_OFFSET
-        )  # sequence = sequence + OFFSET
-        .execution_options(
-            synchronize_session=False
-        )  # Do not sync ORM state (prevents collisions)
+    db.execute(
+        update(stop_model.Stop)
+        .where(stop_model.Stop.run_id == run_id)
+        .where(stop_model.Stop.sequence >= start_seq)
+        .where(stop_model.Stop.sequence <= end_seq)
+        .values(sequence=stop_model.Stop.sequence + SHIFT_OFFSET)
+        .execution_options(synchronize_session=False)
     )
 
-    db.execute(  # Phase 2: bring block back shifted +1
-        update(stop_model.Stop)  # UPDATE stops
-        .where(stop_model.Stop.route_id == route_id)  # Only this route
-        .where(stop_model.Stop.sequence >= start_seq + SHIFT_OFFSET)  # Shifted start
-        .where(stop_model.Stop.sequence <= end_seq + SHIFT_OFFSET)  # Shifted end
-        .values(
-            sequence=stop_model.Stop.sequence - SHIFT_OFFSET + 1
-        )  # final = original + 1
-        .execution_options(
-            synchronize_session=False
-        )  # Do not sync ORM state (prevents collisions)
+    db.execute(
+        update(stop_model.Stop)
+        .where(stop_model.Stop.run_id == run_id)
+        .where(stop_model.Stop.sequence >= start_seq + SHIFT_OFFSET)
+        .where(stop_model.Stop.sequence <= end_seq + SHIFT_OFFSET)
+        .values(sequence=stop_model.Stop.sequence - SHIFT_OFFSET + 1)
+        .execution_options(synchronize_session=False)
     )
 
 
-def shift_block_down(db: Session, route_id: int, start_seq: int, end_seq: int) -> None:
-    """Shift stops in range [start_seq..end_seq] up by -1 (decrease sequence)."""
-    if start_seq > end_seq:  # Invalid range => nothing to do
-        return  # Exit early
+def shift_block_down(db: Session, run_id: int, start_seq: int, end_seq: int) -> None:
+    if start_seq > end_seq:
+        return
 
-    db.execute(  # Phase 1: move block into safe zone
-        update(stop_model.Stop)  # UPDATE stops
-        .where(stop_model.Stop.route_id == route_id)  # Only this route
-        .where(stop_model.Stop.sequence >= start_seq)  # Start of impacted block
-        .where(stop_model.Stop.sequence <= end_seq)  # End of impacted block
-        .values(
-            sequence=stop_model.Stop.sequence + SHIFT_OFFSET
-        )  # sequence = sequence + OFFSET
-        .execution_options(
-            synchronize_session=False
-        )  # Do not sync ORM state (prevents collisions)
+    db.execute(
+        update(stop_model.Stop)
+        .where(stop_model.Stop.run_id == run_id)
+        .where(stop_model.Stop.sequence >= start_seq)
+        .where(stop_model.Stop.sequence <= end_seq)
+        .values(sequence=stop_model.Stop.sequence + SHIFT_OFFSET)
+        .execution_options(synchronize_session=False)
     )
 
-    db.execute(  # Phase 2: bring block back shifted -1
-        update(stop_model.Stop)  # UPDATE stops
-        .where(stop_model.Stop.route_id == route_id)  # Only this route
-        .where(stop_model.Stop.sequence >= start_seq + SHIFT_OFFSET)  # Shifted start
-        .where(stop_model.Stop.sequence <= end_seq + SHIFT_OFFSET)  # Shifted end
-        .values(
-            sequence=stop_model.Stop.sequence - SHIFT_OFFSET - 1
-        )  # final = original - 1
-        .execution_options(
-            synchronize_session=False
-        )  # Do not sync ORM state (prevents collisions)
+    db.execute(
+        update(stop_model.Stop)
+        .where(stop_model.Stop.run_id == run_id)
+        .where(stop_model.Stop.sequence >= start_seq + SHIFT_OFFSET)
+        .where(stop_model.Stop.sequence <= end_seq + SHIFT_OFFSET)
+        .values(sequence=stop_model.Stop.sequence - SHIFT_OFFSET - 1)
+        .execution_options(synchronize_session=False)
     )
 
 
-# -----------------------------------------------------------
-# Normalize sequences for a single route (gap-free 1..N)
-# - Keeps existing order (by current sequence ASC)
-# - Uses 2-phase shift to avoid UNIQUE(route_id, sequence) collisions
-# -----------------------------------------------------------
-def normalize_route_sequences(db: Session, route_id: int) -> None:
-    OFFSET = 100000  # Large offset to move rows into a safe, non-colliding range
+def normalize_run_sequences(db: Session, run_id: int) -> None:
+    offset = 100000
 
-    # 1) Load all stops for this route in current order
     stops = (
-        db.query(Stop)  # Query Stop table
-        .filter(Stop.route_id == route_id)  # Only stops for the given route
-        .order_by(Stop.sequence.asc())  # Preserve current ordering by sequence
-        .all()  # Materialize list
+        db.query(Stop)
+        .filter(Stop.run_id == run_id)
+        .order_by(Stop.sequence.asc())
+        .all()
     )
 
-    # 2) If no stops, nothing to normalize
-    if not stops:  # Empty route => no work
-        return  # Exit early
+    if not stops:
+        return
 
-    # 3) Build desired mapping: stable 1..N in same order
-    desired_by_id = {}  # stop_id -> new_sequence
-    for idx, s in enumerate(stops):  # Walk stops in current sequence order
-        desired_by_id[s.id] = idx + 1  # Assign normalized sequence starting at 1
+    desired_by_id = {s.id: idx + 1 for idx, s in enumerate(stops)}
+    if all(s.sequence == desired_by_id[s.id] for s in stops):
+        return
 
-    # 4) Fast exit if already normalized
-    already_ok = True  # Assume OK until proven otherwise
-    for s in stops:  # Check each stop
-        if s.sequence != desired_by_id[s.id]:  # If any stop has a gap or mismatch
-            already_ok = False  # Mark as not normalized
-            break  # Stop checking
-    if already_ok:  # If all sequences already 1..N
-        return  # Nothing to do
+    for s in stops:
+        s.sequence = s.sequence + offset
+    db.flush()
 
-    # 5) Phase 1: move all sequences to a safe zone (sequence + OFFSET)
-    for s in stops:  # For each stop
-        s.sequence = (
-            s.sequence + OFFSET
-        )  # Shift into safe zone to avoid unique collisions
-    db.flush()  # Flush phase 1 to DB so phase 2 is safe
-
-    # 6) Phase 2: write final normalized sequences (1..N)
-    for s in stops:  # For each stop again
-        s.sequence = desired_by_id[s.id]  # Set exact normalized value
-    db.flush()  # Flush final normalized values
+    for s in stops:
+        s.sequence = desired_by_id[s.id]
+    db.flush()
 
 
-# -----------------------------------------------------------
-# GET /stops/validate/{route_id}
-# DEV TOOL — Validate route sequence integrity
-# - Checks duplicates
-# - Checks gaps
-# - Ensures sequences are exactly 1..N
-# - Read-only (no DB writes)
-# -----------------------------------------------------------
-@router.get("/validate/{route_id}")
-def validate_route_sequences(
-    route_id: int,
+@router.get("/validate/{run_id}")
+def validate_run_sequences(
+    run_id: int,
     db: Session = Depends(get_db),
     _: None = Depends(require_admin),
 ):
-
     stops = (
-        db.query(stop_model.Stop)  # Load stops for this route
-        .filter(stop_model.Stop.route_id == route_id)  # Filter by route
-        .order_by(stop_model.Stop.sequence.asc())  # Order by sequence
-        .all()  # Materialize list
+        db.query(stop_model.Stop)
+        .filter(stop_model.Stop.run_id == run_id)
+        .order_by(stop_model.Stop.sequence.asc())
+        .all()
     )
 
-    if not stops:  # If route has no stops
+    if not stops:
         return {
-            "route_id": route_id,
+            "run_id": run_id,
             "valid": True,
-            "message": "No stops found (empty route).",
+            "message": "No stops found (empty run).",
         }
 
-    sequences = [s.sequence for s in stops]  # Extract sequence list
-    expected = list(range(1, len(stops) + 1))  # Expected 1..N
+    sequences = [s.sequence for s in stops]
+    expected = list(range(1, len(stops) + 1))
 
-    duplicates = len(sequences) != len(set(sequences))  # Check duplicate sequences
-    gaps = sequences != expected  # Check gap-free condition
+    duplicates = len(sequences) != len(set(sequences))
+    gaps = sequences != expected
 
     return {
-        "route_id": route_id,
+        "run_id": run_id,
         "valid": not duplicates and not gaps,
         "total_stops": len(stops),
         "sequences": sequences,
@@ -210,290 +128,195 @@ def validate_route_sequences(
     }
 
 
-# -----------------------------------------------------------
-# POST /stops/normalize/{route_id}
-# ADMIN TOOL — Force repair route sequences
-# - Rebuilds sequence as 1..N
-# - Keeps current ordering
-# - Uses collision-safe 2-phase logic
-# ADMIN TOOL — Force repair route sequences
-# -----------------------------------------------------------
-@router.post("/normalize/{route_id}")
-def force_normalize_route(
-    route_id: int,
+@router.post("/normalize/{run_id}")
+def force_normalize_run(
+    run_id: int,
     db: Session = Depends(get_db),
     _: None = Depends(require_admin),
 ):
-    try:  # Protected DB operation
-
-        normalize_route_sequences(db, route_id)  # Repair sequence integrity
-        db.commit()  # Commit normalization
+    try:
+        normalize_run_sequences(db, run_id)
+        db.commit()
 
         stops = (
             db.query(stop_model.Stop)
-            .filter(stop_model.Stop.route_id == route_id)
+            .filter(stop_model.Stop.run_id == run_id)
             .order_by(stop_model.Stop.sequence.asc())
             .all()
         )
 
         return {
-            "route_id": route_id,
+            "run_id": run_id,
             "status": "normalized",
             "total_stops": len(stops),
             "sequences": [s.sequence for s in stops],
         }
-
-    # -----------------------------------------------------------
-    # IntegrityError handling
-    # -----------------------------------------------------------
-    except IntegrityError as e:  # Catch DB constraint errors
-        db.rollback()  # Roll back transaction safely
+    except IntegrityError as e:
+        db.rollback()
         raise_conflict_if_unique(
             db,
             e,
-            constraint_name="uq_stops_route_sequence",
-            sqlite_columns=("route_id", "sequence"),
-            detail="Stop sequence conflict for this route",
+            constraint_name="uq_stops_run_sequence",
+            sqlite_columns=("run_id", "sequence"),
+            detail="Stop sequence conflict for this run",
         )
         raise HTTPException(status_code=400, detail="Integrity error")
 
 
-# -----------------------------------------------------------
-# POST /stops → Create stop (append or insert)
-# - Append Mode: if sequence missing → MAX(sequence)+1
-# - Insert Mode: if sequence provided → clamp + shift + insert
-# -----------------------------------------------------------
 @router.post("/", response_model=StopOut, status_code=201)
 def create_stop(payload: StopCreate, db: Session = Depends(get_db)):
+    try:
+        run = db.get(run_model.Run, payload.run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found")
 
-    try:  # Start protected DB operation
-
-        # -----------------------------------------------------------
-        # Read current max sequence for this route (used by both modes)
-        # -----------------------------------------------------------
-        max_seq = (  # Calculate current max sequence
-            db.query(func.max(stop_model.Stop.sequence))  # SELECT MAX(sequence)
-            .filter(stop_model.Stop.route_id == payload.route_id)  # WHERE route_id = X
-            .scalar()  # Return scalar value
+        max_seq = (
+            db.query(func.max(stop_model.Stop.sequence))
+            .filter(stop_model.Stop.run_id == payload.run_id)
+            .scalar()
         )
-        max_seq = max_seq or 0  # If no stops exist yet, treat as 0
+        max_seq = max_seq or 0
 
-        # -----------------------------------------------------------
-        # Mode 1: Append Mode (client omitted sequence)
-        # -----------------------------------------------------------
-        if payload.sequence is None:  # If client did not send sequence
-            seq = max_seq + 1  # Append to end (max+1)
-
-        # -----------------------------------------------------------
-        # Mode 2: Insert Mode (client provided sequence)
-        # -----------------------------------------------------------
+        if payload.sequence is None:
+            seq = max_seq + 1
         else:
-            target = payload.sequence  # Requested insert position
-            target = max(
-                1, min(target, max_seq + 1)
-            )  # Clamp into valid range [1..max+1]
+            target = max(1, min(payload.sequence, max_seq + 1))
+            if target <= max_seq:
+                shift_block_up(db, payload.run_id, target, max_seq)
+            db.expire_all()
+            seq = target
 
-            if target <= max_seq:  # If inserting into the middle
-                shift_block_up(
-                    db, payload.route_id, target, max_seq
-                )  # Shift [target..max] down by +1 (make room)
+        data = payload.model_dump()
+        data["sequence"] = seq
 
-            db.expire_all()  # Reset ORM state after bulk UPDATEs
+        if not data.get("name") and data.get("address"):
+            data["name"] = data["address"]
+        if not data.get("name"):
+            data["name"] = f"Stop {seq}"
 
-            seq = target  # New stop takes the target slot
+        stop = stop_model.Stop(**data)
+        db.add(stop)
+        db.commit()
+        db.refresh(stop)
+        return stop
 
-        # -----------------------------------------------------------
-        # Create stop record (force computed sequence)
-        # - Auto-fill stop name if missing:
-        #     1) Use provided name
-        #     2) If name missing but address exists → use address
-        #     3) If both missing → use "Stop {sequence}"
-        # -----------------------------------------------------------
-        data = payload.model_dump()  # Convert payload to dict
-        data["sequence"] = seq  # Force final sequence into dict
-
-        if not data.get("name") and data.get("address"):  # If name missing but address exists
-            data["name"] = data["address"]  # Use address as stop name
-
-        if not data.get("name"):  # If still missing
-            data["name"] = f"Stop {seq}"  # Fallback name based on sequence
-
-        stop = stop_model.Stop(**data)  # Build ORM object
-        db.add(stop)  # Add to session
-        db.commit()  # Commit once (atomic)
-        db.refresh(stop)  # Refresh to load generated fields
-        return stop  # Return created stop
-
-    except IntegrityError as e:  # Catch DB constraint errors
-        db.rollback()  # Roll back transaction safely
-        raise_conflict_if_unique(  # Raise 409 if UNIQUE violated
-            db,  # DB session (dialect detection)
-            e,  # IntegrityError instance
-            constraint_name="uq_stops_route_sequence",  # Postgres constraint name
-            sqlite_columns=("route_id", "sequence"),  # SQLite message fallback keys
-            detail="Stop sequence conflict for this route",  # Client-friendly 409 detail
+    except IntegrityError as e:
+        db.rollback()
+        raise_conflict_if_unique(
+            db,
+            e,
+            constraint_name="uq_stops_run_sequence",
+            sqlite_columns=("run_id", "sequence"),
+            detail="Stop sequence conflict for this run",
         )
-        raise HTTPException(
-            status_code=400, detail="Integrity error"
-        )  # Other integrity issues → 400
-# -----------------------------------------------------------
-# GET /stops → List stops (optionally filter by route_id)
-# Always ordered by sequence ascending
-# -----------------------------------------------------------
-@router.get("/", response_model=List[schemas.StopOut])
-def get_stops(route_id: int | None = None, db: Session = Depends(get_db)):
-    query = db.query(stop_model.Stop)  # Base query
-
-    if route_id is not None:  # If filtering by route
-        query = query.filter(stop_model.Stop.route_id == route_id)  # Apply route filter
-
-    query = query.order_by(
-        stop_model.Stop.sequence.asc()
-    )  # Ensure stops ordered by sequence
-    return query.all()  # Return ordered results
+        raise HTTPException(status_code=400, detail="Integrity error")
 
 
-# -----------------------------------------------------------
-# PUT /stops/{stop_id} → Update stop info
-# -----------------------------------------------------------
-@router.put("/{stop_id}", response_model=schemas.StopOut)
+@router.get("/", response_model=List[StopOut])
+def get_stops(run_id: int | None = None, db: Session = Depends(get_db)):
+    query = db.query(stop_model.Stop)
+
+    if run_id is not None:
+        query = query.filter(stop_model.Stop.run_id == run_id)
+
+    query = query.order_by(stop_model.Stop.sequence.asc())
+    return query.all()
+
+
+@router.put("/{stop_id}", response_model=StopOut)
 def update_stop(
     stop_id: int, stop_in: StopUpdate, db: Session = Depends(get_db)
 ):
-    stop = db.get(stop_model.Stop, stop_id)  # Load stop from DB
-    if not stop:  # If stop does not exist
-        raise HTTPException(status_code=404, detail="Stop not found")  # Return 404
+    stop = db.get(stop_model.Stop, stop_id)
+    if not stop:
+        raise HTTPException(status_code=404, detail="Stop not found")
 
-    updates = stop_in.model_dump(exclude_none=True)  # Only apply provided fields
-    for key, value in updates.items():  # Loop through fields
-        setattr(stop, key, value)  # Update stop attributes
+    updates = stop_in.model_dump(exclude_none=True)
+    for key, value in updates.items():
+        setattr(stop, key, value)
 
-    db.commit()  # Save changes
-    db.refresh(stop)  # Refresh instance
-    return stop  # Return updated stop
+    db.commit()
+    db.refresh(stop)
+    return stop
 
 
-# -----------------------------------------------------------
-# DELETE /stops/{stop_id} → Remove stop
-# - Deletes stop
-# - Normalizes remaining stops to keep sequences gap-free
-# -----------------------------------------------------------
 @router.delete("/{stop_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_stop(stop_id: int, db: Session = Depends(get_db)):
+    try:
+        stop = db.get(stop_model.Stop, stop_id)
+        if not stop:
+            raise HTTPException(status_code=404, detail="Stop not found")
 
-    try:  # Begin protected transaction block
+        run_id = stop.run_id
 
-        stop = db.get(stop_model.Stop, stop_id)  # Fetch stop by primary key
-        if not stop:  # If stop does not exist
-            raise HTTPException(status_code=404, detail="Stop not found")  # Return 404
+        db.delete(stop)
+        db.flush()
 
-        route_id = stop.route_id  # Save route_id before deletion
+        normalize_run_sequences(db, run_id)
 
-        db.delete(stop)  # Mark stop for deletion
-        db.flush()  # Apply deletion before renumbering
+        db.commit()
+        return None
 
-        normalize_route_sequences(
-            db, route_id
-        )  # Reassign sequences 1..N for this route
-
-        db.commit()  # Commit entire operation atomically
-        return None  # 204 No Content response
-
-    # -----------------------------------------------------------
-    # IntegrityError handling
-    # - Convert UNIQUE(route_id, sequence) into HTTP 409
-    # - Keep other integrity errors as HTTP 400
-    # -----------------------------------------------------------
-    except IntegrityError as e:  # Catch DB constraint issues
-        db.rollback()  # Roll back transaction safely
-        raise_conflict_if_unique(  # Raise 409 if UNIQUE violated
-            db,  # DB session (dialect detection)
-            e,  # IntegrityError instance
-            constraint_name="uq_stops_route_sequence",  # Postgres constraint name
-            sqlite_columns=("route_id", "sequence"),  # SQLite message fallback keys
-            detail="Stop sequence conflict for this route",  # Client-friendly 409 detail
+    except IntegrityError as e:
+        db.rollback()
+        raise_conflict_if_unique(
+            db,
+            e,
+            constraint_name="uq_stops_run_sequence",
+            sqlite_columns=("run_id", "sequence"),
+            detail="Stop sequence conflict for this run",
         )
-        raise HTTPException(
-            status_code=400, detail="Integrity error"
-        )  # Other DB errors → 400
+        raise HTTPException(status_code=400, detail="Integrity error")
 
 
-# -----------------------------------------------------------
-# PUT /stops/{stop_id}/reorder → Move stop to new position
-# - Moves stop out of range first (OFFSET)
-# - Shifts impacted block with collision-safe bulk UPDATE
-# -----------------------------------------------------------
 @router.put("/{stop_id}/reorder", response_model=StopOut)
 def reorder_stop(
     stop_id: int, payload: StopReorder, db: Session = Depends(get_db)
 ):
+    try:
+        stop = db.get(stop_model.Stop, stop_id)
+        if not stop:
+            raise HTTPException(status_code=404, detail="Stop not found")
 
-    try:  # Protected transaction
+        run_id = stop.run_id
+        old_seq = stop.sequence
 
-        stop = db.get(stop_model.Stop, stop_id)  # Load stop
-        if not stop:  # If not found
-            raise HTTPException(status_code=404, detail="Stop not found")  # Return 404
+        max_seq = (
+            db.query(func.max(stop_model.Stop.sequence))
+            .filter(stop_model.Stop.run_id == run_id)
+            .scalar()
+        ) or 0
 
-        route_id = stop.route_id  # Save route id
-        old_seq = stop.sequence  # Save current position
+        new_seq = max(1, min(payload.new_sequence, max_seq))
 
-        max_seq = (  # Get current max sequence in route
-            db.query(func.max(stop_model.Stop.sequence))  # SELECT MAX(sequence)
-            .filter(stop_model.Stop.route_id == route_id)  # WHERE route_id = ?
-            .scalar()  # Return scalar
-        ) or 0  # Default 0 if no rows
+        if new_seq == old_seq:
+            return stop
 
-        # -----------------------------------------------------------
-        # Clamp target position into valid range
-        # -----------------------------------------------------------
-        new_seq = max(1, min(payload.new_sequence, max_seq))  # Clamp into [1..max_seq]
+        offset = 100000
+        stop.sequence = stop.sequence + offset
+        db.flush()
 
-        if new_seq == old_seq:  # If nothing changes
-            return stop  # No operation needed
+        if new_seq < old_seq:
+            shift_block_up(db, run_id, new_seq, old_seq - 1)
+        else:
+            shift_block_down(db, run_id, old_seq + 1, new_seq)
 
-        OFFSET = 100000  # Safe offset
+        db.expire_all()
 
-        stop.sequence = (
-            stop.sequence + OFFSET
-        )  # Phase 1: move current stop out of the way
-        db.flush()  # Flush so the gap is real in DB
+        stop = db.get(stop_model.Stop, stop_id)
+        stop.sequence = new_seq
 
-        # -----------------------------------------------------------
-        # Shift impacted block (collision-safe)
-        # -----------------------------------------------------------
-        if new_seq < old_seq:  # Moving upward (e.g., 5 → 2)
-            shift_block_up(
-                db, route_id, new_seq, old_seq - 1
-            )  # Shift [new..old-1] down by +1 (make room)
-        else:  # Moving downward (e.g., 2 → 5)
-            shift_block_down(
-                db, route_id, old_seq + 1, new_seq
-            )  # Shift [old+1..new] up by -1 (fill gap)
+        db.commit()
+        db.refresh(stop)
+        return stop
 
-        db.expire_all()  # Reset ORM state after bulk UPDATEs
-
-        stop = db.get(stop_model.Stop, stop_id)  # Reload stop (ensures fresh ORM state)
-        stop.sequence = new_seq  # Place stop at new position
-
-        db.commit()  # Commit all changes atomically
-        db.refresh(stop)  # Reload updated stop
-        return stop  # Return updated stop
-
-    # -----------------------------------------------------------
-    # IntegrityError handling
-    # - Convert UNIQUE(route_id, sequence) into HTTP 409
-    # - Keep other integrity errors as HTTP 400
-    # -----------------------------------------------------------
-    except IntegrityError as e:  # Catch DB constraint issues
-        db.rollback()  # Roll back transaction safely
-        raise_conflict_if_unique(  # Raise 409 if UNIQUE violated
-            db,  # DB session (dialect detection)
-            e,  # IntegrityError instance
-            constraint_name="uq_stops_route_sequence",  # Postgres constraint name
-            sqlite_columns=("route_id", "sequence"),  # SQLite message fallback keys
-            detail="Stop sequence conflict for this route",  # Client-friendly 409 detail
+    except IntegrityError as e:
+        db.rollback()
+        raise_conflict_if_unique(
+            db,
+            e,
+            constraint_name="uq_stops_run_sequence",
+            sqlite_columns=("run_id", "sequence"),
+            detail="Stop sequence conflict for this run",
         )
-        raise HTTPException(
-            status_code=400, detail="Integrity error"
-        )  # Other DB errors → 400
-
+        raise HTTPException(status_code=400, detail="Integrity error")

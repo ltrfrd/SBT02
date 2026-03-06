@@ -39,7 +39,7 @@ from backend.models import (                # Import model modules for ORM bindi
 # ---------- ROUTERS ----------
 # Import each router module (each exposes a .router object)
 from backend.routers import (
-    driver, school, student, route, stop, run, payroll, report
+    driver, school, student, route, stop, run, payroll, report, student_run_assignment
 )
 
 # ---------- UTILS ----------
@@ -91,6 +91,7 @@ app.include_router(stop.router)
 app.include_router(run.router)
 app.include_router(payroll.router)
 app.include_router(report.router)
+app.include_router(student_run_assignment.router)
 
 
 # -----------------------------------------------------------
@@ -211,7 +212,7 @@ def driver_run_view(
 
     # Determine run state and stops
     run_status = "active" if active_run else "pending"
-    stops = sorted(active_run.route.stops, key=lambda s: s.sequence) if active_run else []
+    stops = sorted(active_run.stops, key=lambda s: s.sequence) if active_run else []
     current_stop_index = 1
 
     return templates.TemplateResponse(

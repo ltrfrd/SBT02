@@ -70,7 +70,7 @@ def raise_conflict_if_unique(
     # -------------------------------------------------------------------------
     if dialect == "sqlite":
         msg = str(orig or err)  # SQLite gives message via exception text
-        # Example: "UNIQUE constraint failed: stops.route_id, stops.sequence"
+        # Example: "UNIQUE constraint failed: stops.run_id, stops.sequence"
         expected = ", ".join(f"stops.{c}" for c in sqlite_columns)
         if "UNIQUE constraint failed:" in msg and expected in msg:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
