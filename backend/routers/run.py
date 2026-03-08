@@ -20,7 +20,7 @@
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload  # Used for eager loading relationships
 
@@ -80,7 +80,6 @@ def create_run(run: RunStart, db: Session = Depends(get_db)):
     db.refresh(new_run)  # Reload saved object
     return new_run  # Return created run
 
-
 # =============================================================================
 # POST /runs/start
 # Start a run
@@ -90,9 +89,9 @@ def start_run(run: RunStart, db: Session = Depends(get_db)):
     driver = db.get(driver_model.Driver, run.driver_id)  # Load driver
     route = db.get(route_model.Route, run.route_id)  # Load route
 
-# -------------------------------------------------------------------------
-# Prevent driver from starting multiple active runs
-# -------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Prevent driver from starting multiple active runs
+    # -------------------------------------------------------------------------
     existing_active_run = (
         db.query(run_model.Run)
         .filter(run_model.Run.driver_id == run.driver_id)
@@ -105,9 +104,13 @@ def start_run(run: RunStart, db: Session = Depends(get_db)):
             status_code=409,
             detail="Driver already has an active run"
         )
+
     if not driver or not route:  # Validate references
         raise HTTPException(status_code=404, detail="Driver or Route not found")
 
+    # -------------------------------------------------------------------------
+    # Create the new run first
+    # -------------------------------------------------------------------------
     new_run = run_model.Run(
         driver_id=run.driver_id,  # Assigned driver
         route_id=run.route_id,  # Assigned route
@@ -116,7 +119,49 @@ def start_run(run: RunStart, db: Session = Depends(get_db)):
     )
 
     db.add(new_run)  # Add run to session
-    db.commit()  # Save to DB
+    db.flush()  # Get new_run.id before copying stops
+
+    # -------------------------------------------------------------------------
+    # Find the most recent source run on the same route that has stops
+    # -------------------------------------------------------------------------
+    source_run = (
+        db.query(run_model.Run)
+        .join(stop_model.Stop, stop_model.Stop.run_id == run_model.Run.id)
+        .filter(run_model.Run.route_id == run.route_id)
+        .filter(run_model.Run.id != new_run.id)
+        .order_by(run_model.Run.start_time.desc(), run_model.Run.id.desc())
+        .first()
+    )
+
+    # -------------------------------------------------------------------------
+    # Copy stops from source run into the new run
+    # -------------------------------------------------------------------------
+    if source_run:
+        source_stops = (
+            db.query(stop_model.Stop)
+            .filter(stop_model.Stop.run_id == source_run.id)
+            .order_by(
+                stop_model.Stop.sequence.asc(),
+                stop_model.Stop.id.asc(),
+            )
+            .all()
+        )
+
+        for stop in source_stops:
+            db.add(
+                stop_model.Stop(
+                    sequence=stop.sequence,  # Keep stop order
+                    type=stop.type,  # Keep stop type
+                    run_id=new_run.id,  # Attach copied stop to new run
+                    name=stop.name,  # Keep stop name
+                    address=stop.address,  # Keep stop address
+                    planned_time=stop.planned_time,  # Keep planned time
+                    latitude=stop.latitude,  # Keep latitude
+                    longitude=stop.longitude,  # Keep longitude
+                )
+            )
+
+    db.commit()  # Save run and copied stops
     db.refresh(new_run)  # Reload saved object
     return new_run  # Return started run
 
@@ -332,6 +377,39 @@ def get_active_run(
         raise HTTPException(status_code=404, detail="No active run found for this driver")
 
     return active_run                               # Return active run
+
+# =============================================================================
+# GET /runs/{run_id}/stops
+# Return ordered stops for a specific run
+#
+# Ordering:
+#   - sequence ascending
+#   - id ascending
+# =============================================================================
+@router.get("/{run_id}/stops", response_model=List[StopOut])
+def get_run_stops(run_id: int, db: Session = Depends(get_db)):
+    # -------------------------------------------------------------------------
+    # Validate run exists
+    # -------------------------------------------------------------------------
+    run = db.get(run_model.Run, run_id)  # Load run by ID
+
+    if not run:  # If run does not exist
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    # -------------------------------------------------------------------------
+    # Load stops in stable order
+    # -------------------------------------------------------------------------
+    stops = (
+        db.query(stop_model.Stop)
+        .filter(stop_model.Stop.run_id == run_id)   # Only stops for this run
+        .order_by(
+            stop_model.Stop.sequence.asc(),         # Primary stable order
+            stop_model.Stop.id.asc(),               # Secondary stable order
+        )
+        .all()
+    )
+
+    return stops  # Return ordered stop list
 
 # =============================================================================
 # GET /runs/{run_id}
@@ -597,3 +675,144 @@ def get_run_summary(run_id: int, db: Session = Depends(get_db)):
         total_assigned_students=len(assignments),
         current_load=current_load,
     )
+
+# =============================================================================
+# GET /runs/progress/by_driver
+# Returns live progress for the newest active run of a driver
+#
+# Purpose:
+#   - Driver/client sends driver_id instead of run_id
+#   - Reuses the same progress logic already built for a run
+# =============================================================================
+@router.get("/progress/by_driver", response_model=schemas.RunProgressOut)
+def get_run_progress_by_driver(
+    driver_id: int,                                       # Driver requesting live progress
+    current_stop_sequence: int = Query(..., ge=1),       # Current stop sequence in the run
+    db: Session = Depends(get_db),                       # Database session dependency
+):
+    # -------------------------------------------------------------------------
+    # Validate driver exists
+    # -------------------------------------------------------------------------
+    driver = db.get(driver_model.Driver, driver_id)      # Load driver by ID
+
+    if not driver:                                       # If driver not found
+        raise HTTPException(status_code=404, detail="Driver not found")
+
+    # -------------------------------------------------------------------------
+    # Find newest active run for this driver
+    # -------------------------------------------------------------------------
+    active_run = (
+        db.query(run_model.Run)
+        .filter(run_model.Run.driver_id == driver_id)    # Only this driver
+        .filter(run_model.Run.end_time.is_(None))        # Only active runs
+        .order_by(run_model.Run.start_time.desc())       # Newest active run first
+        .first()
+    )
+
+    if not active_run:                                   # If no active run found
+        raise HTTPException(status_code=404, detail="No active run found for this driver")
+
+    # -------------------------------------------------------------------------
+    # Reuse run progress endpoint logic
+    # -------------------------------------------------------------------------
+    return get_run_progress(
+        run_id=active_run.id,                            # Use active run ID
+        current_stop_sequence=current_stop_sequence,     # Forward current stop sequence
+        db=db,                                           # Reuse same DB session
+    )
+# =============================================================================
+# Live Run Progress
+# -----------------------------------------------------------------------------
+# Returns the current stop and next stop for a run based on the provided
+# current stop sequence.
+#
+# This is a read-only operational endpoint for live driver workflow.
+# It does not persist progress yet.
+# =============================================================================
+@router.get("/{run_id}/progress", response_model=schemas.RunProgressOut)
+def get_run_progress(
+    run_id: int,
+    current_stop_sequence: int = Query(..., ge=1),   # Current stop sequence in the run
+    db: Session = Depends(get_db),
+):
+    # -------------------------------------------------------------------------
+    # Load run with related driver and route for display fields
+    # -------------------------------------------------------------------------
+    run = (
+        db.query(run_model.Run)
+        .options(
+            joinedload(run_model.Run.driver),         # Load driver for driver_name if needed later
+            joinedload(run_model.Run.route),          # Load route for route_number
+        )
+        .filter(run_model.Run.id == run_id)
+        .first()
+    )
+
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if run.end_time is not None:  # Run already completed
+        raise HTTPException(
+            status_code=400,
+            detail="Run has already ended"
+    )
+
+    # -------------------------------------------------------------------------
+    # Load run stops in stable order
+    # -------------------------------------------------------------------------
+    stops = (
+        db.query(stop_model.Stop)
+        .filter(stop_model.Stop.run_id == run_id)
+        .order_by(
+            stop_model.Stop.sequence.asc(),           # Primary stable order
+            stop_model.Stop.id.asc(),                 # Secondary stable order
+        )
+        .all()
+    )
+
+    if not stops:
+        raise HTTPException(status_code=404, detail="No stops found for this run")
+
+    # -------------------------------------------------------------------------
+    # Find current stop by sequence
+    # -------------------------------------------------------------------------
+    current_index = None
+
+    for index, stop in enumerate(stops):
+        if stop.sequence == current_stop_sequence:
+            current_index = index
+            break
+
+    if current_index is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Current stop sequence not found for this run",
+        )
+
+    current_stop = stops[current_index]                              # Current stop object
+    next_stop = stops[current_index + 1] if current_index + 1 < len(stops) else None  # Next stop if exists
+
+    # -------------------------------------------------------------------------
+    # Build live progress response
+    # -------------------------------------------------------------------------
+    return schemas.RunProgressOut(
+        run_id=run.id,
+        route_id=run.route_id,
+        route_number=run.route.route_number if run.route else None,
+        run_type=run.run_type,
+
+        total_stops=len(stops),
+        current_stop_index=current_index + 1,                        # Convert to 1-based position
+        remaining_stops=len(stops) - current_index,                  # Includes current stop
+
+        current_stop_id=current_stop.id,
+        current_stop_name=current_stop.name,
+        current_stop_sequence=current_stop.sequence,
+        current_stop_planned_time=current_stop.planned_time,
+
+        next_stop_id=next_stop.id if next_stop else None,
+        next_stop_name=next_stop.name if next_stop else None,
+        next_stop_sequence=next_stop.sequence if next_stop else None,
+        next_stop_planned_time=next_stop.planned_time if next_stop else None,
+    )
+

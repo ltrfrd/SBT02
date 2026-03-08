@@ -8,7 +8,7 @@
 #   - run summary output
 # =============================================================================
 
-from datetime import datetime
+from datetime import datetime, time  
 from enum import Enum
 from typing import List, Optional
 
@@ -109,3 +109,33 @@ class RunSummaryOut(BaseModel):
     current_load: int                       # Current cumulative load based on assignments
 
     model_config = ConfigDict(from_attributes=True)
+
+    # =============================================================================
+# Live Run Progress Output
+# -----------------------------------------------------------------------------
+# Used by the driver workflow endpoint that shows:
+# - current stop
+# - next stop
+# - progress through the run
+# =============================================================================
+class RunProgressOut(BaseModel):
+    run_id: int                                  # Current run ID
+    route_id: int                                # Parent route ID
+    route_number: Optional[str] = None           # Route number for display
+    run_type: RunType                            # AM / PM / etc.
+
+    total_stops: int                             # Total number of stops in run
+    current_stop_index: int                      # 1-based current stop position
+    remaining_stops: int                         # Stops remaining including current
+
+    current_stop_id: Optional[int] = None        # Current stop database ID
+    current_stop_name: Optional[str] = None      # Current stop display name
+    current_stop_sequence: Optional[int] = None  # Current stop sequence number
+    current_stop_planned_time: Optional[time] = None  # Planned time for current stop
+
+    next_stop_id: Optional[int] = None           # Next stop database ID
+    next_stop_name: Optional[str] = None         # Next stop display name
+    next_stop_sequence: Optional[int] = None     # Next stop sequence number
+    next_stop_planned_time: Optional[time] = None  # Planned time for next stop
+
+    model_config = ConfigDict(from_attributes=True)  # Enable ORM -> schema conversion

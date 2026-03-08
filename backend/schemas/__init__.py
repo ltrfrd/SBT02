@@ -64,6 +64,14 @@ from .student_run_assignment import (
     StudentRunAssignmentOut,
 )
 
+# -------------------------------------------------------------------------
+# Run schemas
+# -------------------------------------------------------------------------
+from .run import (
+    RunOut,          # Standard run response schema
+    RunSummaryOut,   # Operational run summary schema
+    RunProgressOut,  # Live driver run progress (current/next stop)
+)
 
 # =============================================================================
 # Public schema exports
@@ -93,4 +101,8 @@ __all__ = [
 
     "StudentRunAssignmentCreate",
     "StudentRunAssignmentOut",
+    
+    "RunOut",
+    "RunSummaryOut",
+    "RunProgressOut",
 ]
