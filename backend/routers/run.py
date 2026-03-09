@@ -744,39 +744,56 @@ def get_run_summary(run_id: int, db: Session = Depends(get_db)):
 # =============================================================================
 @router.get("/progress/by_driver", response_model=schemas.RunProgressOut)
 def get_run_progress_by_driver(
-    driver_id: int,                                       # Driver requesting live progress
-    current_stop_sequence: int = Query(..., ge=1),       # Current stop sequence in the run
-    db: Session = Depends(get_db),                       # Database session dependency
+    driver_id: int,                                                   # Driver whose active run we want
+    current_stop_sequence: int | None = Query(None),                  # Optional manual override
+    db: Session = Depends(get_db)                                     # Database session
 ):
     # -------------------------------------------------------------------------
     # Validate driver exists
     # -------------------------------------------------------------------------
-    driver = db.get(driver_model.Driver, driver_id)      # Load driver by ID
-
-    if not driver:                                       # If driver not found
+    driver = db.get(driver_model.Driver, driver_id)                   # Load driver by ID
+    if not driver:                                                    # If driver not found
         raise HTTPException(status_code=404, detail="Driver not found")
 
     # -------------------------------------------------------------------------
-    # Find newest active run for this driver
+    # Find the newest active run for this driver
     # -------------------------------------------------------------------------
     active_run = (
-        db.query(run_model.Run)
-        .filter(run_model.Run.driver_id == driver_id)    # Only this driver
-        .filter(run_model.Run.end_time.is_(None))        # Only active runs
-        .order_by(run_model.Run.start_time.desc())       # Newest active run first
+        db.query(run_model.Run)                                       # Query runs
+        .filter(run_model.Run.driver_id == driver_id)                 # Same driver
+        .filter(run_model.Run.end_time.is_(None))                     # Only active runs
+        .order_by(run_model.Run.start_time.desc(), run_model.Run.id.desc())  # Newest first
         .first()
     )
 
-    if not active_run:                                   # If no active run found
+    # -------------------------------------------------------------------------
+    # Validate active run exists
+    # -------------------------------------------------------------------------
+    if not active_run:                                                # No active run found
         raise HTTPException(status_code=404, detail="No active run found for this driver")
 
     # -------------------------------------------------------------------------
-    # Reuse run progress endpoint logic
+    # Resolve stop sequence priority:
+    # 1) explicit query param
+    # 2) stored run progress
+    # 3) default to first stop
+    # -------------------------------------------------------------------------
+    resolved_sequence = (
+        current_stop_sequence                                         # Manual override from query param
+        if current_stop_sequence is not None
+        else active_run.current_stop_sequence                         # Stored run progress if present
+    )
+
+    if resolved_sequence is None:                                     # Nothing stored yet
+        resolved_sequence = 1                                         # Default to first stop
+
+    # -------------------------------------------------------------------------
+    # Reuse the existing run progress logic
     # -------------------------------------------------------------------------
     return get_run_progress(
-        run_id=active_run.id,                            # Use active run ID
-        current_stop_sequence=current_stop_sequence,     # Forward current stop sequence
-        db=db,                                           # Reuse same DB session
+        run_id=active_run.id,                                         # Active run ID
+        current_stop_sequence=resolved_sequence,                      # Final resolved sequence
+        db=db                                                         # Same database session
     )
 # =============================================================================
 # Live Run Progress
