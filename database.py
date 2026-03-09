@@ -35,8 +35,8 @@ load_dotenv()                                               # Read .env and popu
 # -----------------------------------------------------------
 # Database URL
 # -----------------------------------------------------------
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sbt.db")  # Default SQLite path
-
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Project root directory
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'sbt.db')}")
 
 # -----------------------------------------------------------
 # Engine
