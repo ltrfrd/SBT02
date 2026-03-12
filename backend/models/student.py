@@ -25,3 +25,9 @@ class Student(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    bus_absences = relationship(
+        "StudentBusAbsence",
+        back_populates="student",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

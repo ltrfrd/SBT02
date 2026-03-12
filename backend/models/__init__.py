@@ -7,6 +7,7 @@ from .run import Run
 from .dispatch import Payroll
 from .run_event import RunEvent
 from .associations import route_schools, StudentRunAssignment
+from .student_bus_absence import StudentBusAbsence, StudentBusAbsenceSource
 
 __all__ = [
     "Driver",
@@ -19,4 +20,7 @@ __all__ = [
     "Payroll",
     "route_schools",
     "StudentRunAssignment",
+    "RunEvent",
+    "StudentBusAbsence",
+    "StudentBusAbsenceSource",
 ]

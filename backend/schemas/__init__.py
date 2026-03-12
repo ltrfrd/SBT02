@@ -63,6 +63,10 @@ from .student_run_assignment import (
     StudentRunAssignmentCreate,
     StudentRunAssignmentOut,
 )
+from .student_bus_absence import (
+    StudentBusAbsenceCreate,
+    StudentBusAbsenceOut,
+)
 
 # =============================================================================
 # Public schema exports
@@ -92,6 +96,8 @@ __all__ = [
 
     "StudentRunAssignmentCreate",
     "StudentRunAssignmentOut",
+    "StudentBusAbsenceCreate",
+    "StudentBusAbsenceOut",
     
     "RunOut",
     "RunSummaryOut",

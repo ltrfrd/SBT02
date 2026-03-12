@@ -58,6 +58,7 @@ from backend.schemas.run import (  # Running board response schemas
     RunningBoardStop,
     RunningBoardStudent,
 )
+from backend.utils.student_bus_absence import apply_run_absence_filter
 from backend.schemas.run import (
     PickupStudentRequest,
     PickupStudentResponse,
@@ -87,11 +88,12 @@ def _get_run_or_404(run_id: int, db: Session) -> Run:
 
 
 def _get_run_assignments(run_id: int, db: Session) -> list[StudentRunAssignment]:
-    return (
+    run = _get_run_or_404(run_id, db)  # Load run once so absence filtering uses authoritative run date/type
+    query = (
         db.query(StudentRunAssignment)
         .filter(StudentRunAssignment.run_id == run_id)
-        .all()
-    )
+    )  # Base effective assignment query for this run
+    return apply_run_absence_filter(query, run).all()  # Exclude planned absences from run-derived assignment views
 
 
 def _build_run_occupancy_counts(assignments: list[StudentRunAssignment]) -> dict[str, int]:
@@ -1442,12 +1444,11 @@ def get_running_board(run_id: int, db: Session = Depends(get_db)):
     # -------------------------------------------------------------------------
     # Load student assignments for this run
     # -------------------------------------------------------------------------
-    assignments = (
+    assignments = apply_run_absence_filter((
         db.query(StudentRunAssignment)  # Query assignment table
         .options(joinedload(StudentRunAssignment.student))  # Load linked student
         .filter(StudentRunAssignment.run_id == run_id)  # Only this run
-        .all()
-    )
+    ), run).all()  # Exclude planned absences from running board source data
 
     # -------------------------------------------------------------------------
     # Group assignments by stop
@@ -1534,15 +1535,14 @@ def get_run_assignments(
     # -------------------------------------------------------------------------
     # Load assignments with student and stop
     # -------------------------------------------------------------------------
-    assignments = (
+    assignments = apply_run_absence_filter((
         db.query(StudentRunAssignment)
         .options(
             joinedload(StudentRunAssignment.student),  # Load student
             joinedload(StudentRunAssignment.stop),     # Load stop
         )
         .filter(StudentRunAssignment.run_id == run_id)
-        .all()
-    )
+    ), run).all()  # Exclude planned absences from run assignment output
 
     # -------------------------------------------------------------------------
     # Apply stable ordering in Python
@@ -1606,11 +1606,10 @@ def get_run_summary(run_id: int, db: Session = Depends(get_db)):
     # -------------------------------------------------------------------------
     # Load student assignments
     # -------------------------------------------------------------------------
-    assignments = (
+    assignments = apply_run_absence_filter((
         db.query(StudentRunAssignment)
         .filter(StudentRunAssignment.run_id == run_id)
-        .all()
-    )
+    ), run).all()  # Exclude planned absences from summary counts
 
     # -------------------------------------------------------------------------
     # Determine run status

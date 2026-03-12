@@ -14,6 +14,7 @@ from backend.schemas.student_run_assignment import (
     StudentRunAssignmentOut,
 )
 from backend.utils.db_errors import raise_conflict_if_unique
+from backend.utils.student_bus_absence import has_student_bus_absence
 
 
 router = APIRouter(prefix="/student-run-assignments", tags=["StudentRunAssignments"])
@@ -35,6 +36,9 @@ def create_assignment(payload: StudentRunAssignmentCreate, db: Session = Depends
 
     if stop.run_id != payload.run_id:
         raise HTTPException(status_code=400, detail="Stop does not belong to run")
+
+    if has_student_bus_absence(payload.student_id, run, db):
+        raise HTTPException(status_code=409, detail="Student has a planned bus absence for this run")  # Do not create effective assignments for absent students
 
     try:
         assignment = StudentRunAssignment(**payload.model_dump())

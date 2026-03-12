@@ -39,7 +39,7 @@ from backend.models import (                # Import model modules for ORM bindi
 # ---------- ROUTERS ----------
 # Import each router module (each exposes a .router object)
 from backend.routers import (
-    driver, school, student, route, stop, run, dispatch, report, student_run_assignment
+    driver, school, student, route, stop, run, dispatch, report, student_run_assignment, student_bus_absence
 )
 
 # ---------- UTILS ----------
@@ -93,6 +93,7 @@ app.include_router(run.router)
 app.include_router(dispatch.router)
 app.include_router(report.router)
 app.include_router(student_run_assignment.router)
+app.include_router(student_bus_absence.router)
 
 
 # -----------------------------------------------------------
