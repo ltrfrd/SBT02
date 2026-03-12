@@ -1,16 +1,18 @@
 # ===========================================================
-# backend/schemas/payroll.py — BST Payroll Schemas
+# backend/schemas/dispatch.py — BST Dispatch Schemas
 # -----------------------------------------------------------
-# Handles workdays + charter time input and verification.
+# Handles dispatch workdays and charter time input.
 # ===========================================================
-from pydantic import BaseModel, ConfigDict
 from datetime import date, time
 from decimal import Decimal
 from typing import Optional
 
+from pydantic import BaseModel, ConfigDict
+
 
 # -----------------------------------------------------------
-# Schema for creating or updating payroll entry
+# PayrollCreate
+# - Create or update a dispatch-backed work entry
 # -----------------------------------------------------------
 class PayrollCreate(BaseModel):
     driver_id: int  # FK: driver submitting
@@ -21,7 +23,8 @@ class PayrollCreate(BaseModel):
 
 
 # -----------------------------------------------------------
-# Schema for returning payroll summary
+# PayrollOut
+# - Return dispatch work entry data
 # -----------------------------------------------------------
 class PayrollOut(BaseModel):
     id: int

@@ -51,9 +51,9 @@ from .run import (
 
 
 # -------------------------------------------------------------------------
-# Payroll schemas
+# Dispatch schemas
 # -------------------------------------------------------------------------
-from .payroll import PayrollCreate, PayrollOut  # Payroll creation and response schemas
+from .dispatch import PayrollCreate, PayrollOut  # Dispatch creation and response schemas
 
 
 # -------------------------------------------------------------------------

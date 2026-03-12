@@ -4,7 +4,7 @@ from backend.models import (
     driver as driver_model,
     route as route_model,
     run as run_model,
-    payroll as payroll_model,
+    dispatch as dispatch_model,
     associations as assoc_model,
     student as student_model,
 )
@@ -20,28 +20,28 @@ def driver_summary(db: Session, driver_id: int) -> dict:
     )
 
     total_charter_hours = (
-        db.query(payroll_model.Payroll)
-        .filter(payroll_model.Payroll.driver_id == driver_id)
-        .with_entities(payroll_model.Payroll.charter_hours)
+        db.query(dispatch_model.Payroll)
+        .filter(dispatch_model.Payroll.driver_id == driver_id)
+        .with_entities(dispatch_model.Payroll.charter_hours)
         .all()
     )
 
     total_hours = sum(float(h[0]) for h in total_charter_hours if h[0])
 
     approved = (
-        db.query(payroll_model.Payroll)
+        db.query(dispatch_model.Payroll)
         .filter(
-            payroll_model.Payroll.driver_id == driver_id,
-            payroll_model.Payroll.approved.is_(True),
+            dispatch_model.Payroll.driver_id == driver_id,
+            dispatch_model.Payroll.approved.is_(True),
         )
         .count()
     )
 
     pending = (
-        db.query(payroll_model.Payroll)
+        db.query(dispatch_model.Payroll)
         .filter(
-            payroll_model.Payroll.driver_id == driver_id,
-            payroll_model.Payroll.approved.is_(False),
+            dispatch_model.Payroll.driver_id == driver_id,
+            dispatch_model.Payroll.approved.is_(False),
         )
         .count()
     )
@@ -115,10 +115,10 @@ def route_summary(db: Session, route_id: int) -> dict:
 
 def payroll_summary(db: Session, start: date, end: date) -> list:
     records = (
-        db.query(payroll_model.Payroll)
+        db.query(dispatch_model.Payroll)
         .filter(
-            payroll_model.Payroll.work_date >= start,
-            payroll_model.Payroll.work_date <= end,
+            dispatch_model.Payroll.work_date >= start,
+            dispatch_model.Payroll.work_date <= end,
         )
         .all()
     )

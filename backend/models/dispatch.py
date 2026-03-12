@@ -1,7 +1,7 @@
 # ===========================================================
-# backend/models/payroll.py — BST Payroll Model
+# backend/models/dispatch.py — BST Dispatch Model
 # -----------------------------------------------------------
-# Tracks driver workdays and charter hours (auto-calculated from start/end).
+# Dispatch module model wrapper for payroll-backed work records.
 # ===========================================================
 from sqlalchemy import Column, Integer, Date, Time, Boolean, ForeignKey, Numeric
 from sqlalchemy.orm import relationship

@@ -1,25 +1,29 @@
 # ===========================================================
-# backend/routers/payroll.py — BST Payroll Router
+# backend/routers/dispatch.py — BST Dispatch Router
 # -----------------------------------------------------------
-# View payroll summaries and record daily charter hours.
+# View dispatch summaries and record daily charter hours.
 # ===========================================================
+from datetime import date, time  # For date/time fields
+from typing import List  # List typing
+
 from fastapi import APIRouter, Depends, HTTPException, status  # FastAPI helpers
 from sqlalchemy.orm import Session  # DB session
-from typing import List  # List typing
-from datetime import date, time  # For date/time fields
-from database import get_db  # DB dependency
-from backend import schemas  # Payroll schemas
-from backend.models import payroll as payroll_model  # Payroll model
+
+from backend import schemas  # Dispatch schemas
+from backend.models import dispatch as dispatch_model  # Dispatch module model
 from backend.models import driver as driver_model  # Validate driver link
+from database import get_db  # DB dependency
+
 
 # -----------------------------------------------------------
 # Router setup
 # -----------------------------------------------------------
-router = APIRouter(prefix="/payroll", tags=["Payroll"])
+router = APIRouter(prefix="/dispatch", tags=["Dispatch"])
 
 
 # -----------------------------------------------------------
-# POST /payroll/charter → Driver submits daily charter hours
+# POST /dispatch/charter
+# - Driver submits daily charter hours
 # -----------------------------------------------------------
 @router.post(
     "/charter", response_model=schemas.PayrollOut, status_code=status.HTTP_201_CREATED
@@ -35,8 +39,8 @@ def log_charter_hours(
     driver = db.get(driver_model.Driver, driver_id)
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found")
-    # Create record; hours auto-computed via property
-    record = payroll_model.Payroll(
+
+    record = dispatch_model.Payroll(  # Create dispatch-backed work record
         driver_id=driver_id,
         work_date=work_date,
         charter_start=charter_start,
@@ -50,37 +54,40 @@ def log_charter_hours(
 
 
 # -----------------------------------------------------------
-# GET /payroll → List all payroll entries (for department)
+# GET /dispatch
+# - List all dispatch entries
 # -----------------------------------------------------------
 @router.get("/", response_model=List[schemas.PayrollOut])
 def get_all_payroll(db: Session = Depends(get_db)):
-    """Payroll department retrieves every entry."""
-    return db.query(payroll_model.Payroll).all()
+    """Dispatch module retrieves every entry."""
+    return db.query(dispatch_model.Payroll).all()
 
 
 # -----------------------------------------------------------
-# GET /payroll/driver/{driver_id} → Driver’s personal summary
+# GET /dispatch/driver/{driver_id}
+# - Driver's personal summary
 # -----------------------------------------------------------
 @router.get("/driver/{driver_id}", response_model=List[schemas.PayrollOut])
 def get_driver_payroll(driver_id: int, db: Session = Depends(get_db)):
-    """List all payroll entries for one driver."""
+    """List all dispatch entries for one driver."""
     driver = db.get(driver_model.Driver, driver_id)
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found")
     return (
-        db.query(payroll_model.Payroll)
-        .filter(payroll_model.Payroll.driver_id == driver_id)
+        db.query(dispatch_model.Payroll)
+        .filter(dispatch_model.Payroll.driver_id == driver_id)
         .all()
     )
 
 
 # -----------------------------------------------------------
-# PUT /payroll/{id}/approve → Payroll verification
+# PUT /dispatch/{payroll_id}/approve
+# - Dispatch verification
 # -----------------------------------------------------------
 @router.put("/{payroll_id}/approve", response_model=schemas.PayrollOut)
 def approve_payroll(payroll_id: int, db: Session = Depends(get_db)):
-    """Payroll department marks a record as approved."""
-    record = db.get(payroll_model.Payroll, payroll_id)
+    """Dispatch module marks a record as approved."""
+    record = db.get(dispatch_model.Payroll, payroll_id)
     if not record:
         raise HTTPException(status_code=404, detail="Payroll record not found")
     record.approved = True

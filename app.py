@@ -33,13 +33,13 @@ from backend.models import (                # Import model modules for ORM bindi
     student as student_model,
     route as route_model,
     run as run_model,
-    payroll as payroll_model
+    dispatch as dispatch_model
 )
 
 # ---------- ROUTERS ----------
 # Import each router module (each exposes a .router object)
 from backend.routers import (
-    driver, school, student, route, stop, run, payroll, report, student_run_assignment
+    driver, school, student, route, stop, run, dispatch, report, student_run_assignment
 )
 
 # ---------- UTILS ----------
@@ -90,7 +90,7 @@ app.include_router(student.router)
 app.include_router(route.router)
 app.include_router(stop.router)
 app.include_router(run.router)
-app.include_router(payroll.router)
+app.include_router(dispatch.router)
 app.include_router(report.router)
 app.include_router(student_run_assignment.router)
 
@@ -244,8 +244,8 @@ def summary_report(request: Request, start: date = None, end: date = None, db: S
     """Shows payroll summary between given dates."""
     end = end or date.today()
     start = start or end
-    records = db.query(payroll_model.Payroll).filter(
-        payroll_model.Payroll.work_date.between(start, end)
+    records = db.query(dispatch_model.Payroll).filter(
+        dispatch_model.Payroll.work_date.between(start, end)
     ).all()
     total_drivers = len({r.driver_id for r in records})
     approved_days = sum(1 for r in records if r.approved)
