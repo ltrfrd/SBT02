@@ -925,6 +925,8 @@ def complete_run(run_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Run not found",
         )
+    
+    
     # -------------------------------------------------------------------------
     # Prevent duplicate completion
     # -------------------------------------------------------------------------
@@ -943,6 +945,40 @@ def complete_run(run_id: int, db: Session = Depends(get_db)):
     run.completed_at = now  # Store completion time
     run.end_time = now  # Also close the run's end_time for summary/report use
 
+
+    # -----------------------------------------------------------
+    # Create automatic no-show events
+    # - Students not picked up by completion time
+    # -----------------------------------------------------------
+    assignments = _get_run_assignments(run_id, db)                    # Load effective assignments for this run
+
+    for assignment in assignments:
+        if assignment.picked_up is True:                              # Skip students who boarded
+            continue
+
+        existing_no_show = (
+            db.query(RunEvent)
+            .filter(
+                RunEvent.run_id == run.id,
+                RunEvent.student_id == assignment.student_id,
+                RunEvent.event_type == "STUDENT_NO_SHOW",
+            )
+            .first()
+        )
+
+        if existing_no_show:
+            continue                                                  # Prevent duplicate no-show events
+
+        no_show_event = RunEvent(
+            run_id=run.id,
+            stop_id=assignment.stop_id,                               # Keep related stop if available
+            student_id=assignment.student_id,
+            event_type="STUDENT_NO_SHOW",
+        )
+
+        db.add(no_show_event)                                         # Store automatic no-show event
+
+    
     # -------------------------------------------------------------------------
     # Save changes
     # -------------------------------------------------------------------------

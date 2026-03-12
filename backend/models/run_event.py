@@ -9,7 +9,7 @@ from sqlalchemy import Column, Integer, ForeignKey, DateTime, String      # SQLA
 from sqlalchemy.orm import relationship                                    # ORM relationships
 from datetime import datetime, timezone                                    # UTC timestamp support
 from database import Base                                                  # SQLAlchemy Base
-
+import enum
 # -----------------------------------------------------------
 # RunEvent model
 # - Stores bus activity timeline
@@ -27,8 +27,16 @@ class RunEvent(Base):
     run = relationship("Run", back_populates="events")                     # Parent run
     stop = relationship("Stop")                                            # Related stop
     student = relationship("Student")                                      # Related student
+
 # -----------------------------------------------------------
-# Relationships
-# - Event timeline for this run
+# Run event type
+# - Allowed event types for run history
 # -----------------------------------------------------------
-events = relationship("RunEvent", back_populates="run", cascade="all, delete-orphan")  # Run timeline events
+class RunEventType(str, enum.Enum):
+    ARRIVE = "ARRIVE"                            # Bus arrived at stop
+    PICKUP = "PICKUP"                            # Student boarded bus
+    DROPOFF = "DROPOFF"                          # Student left bus
+    STUDENT_NO_SHOW = "STUDENT_NO_SHOW"          # Student never boarded and had no planned absence
+
+
+run = relationship("Run", back_populates="events")
