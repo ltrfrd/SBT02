@@ -7,7 +7,7 @@
 # -----------------------------
 import enum  # Python enum support
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer  # SQLAlchemy column types
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, Boolean # SQLAlchemy column types
 from sqlalchemy.orm import relationship  # ORM relationship mapping
 
 from database import Base  # Declarative base class
@@ -37,9 +37,12 @@ class Run(Base):
     end_time = Column(DateTime)  # Store when the run ended
     current_stop_id = Column(Integer, nullable=True)  # Store current actual stop ID without enforcing a cyclic FK
     current_stop_sequence = Column(Integer, nullable=True)  # Store current actual stop sequence
+    is_completed = Column(Boolean, default=False, nullable=False)  # Run completion flag
+    completed_at = Column(DateTime(timezone=True), nullable=True)  # When the run was completed
 
     driver = relationship("Driver", back_populates="runs")  # Load assigned driver
     route = relationship("Route", back_populates="runs")  # Load assigned route
     stops = relationship("Stop", back_populates="run", cascade="all, delete-orphan", passive_deletes=True, foreign_keys="Stop.run_id")  # Load stops that belong to this run
     student_assignments = relationship("StudentRunAssignment", back_populates="run", cascade="all, delete-orphan", passive_deletes=True)  # Load runtime student assignments
     events = relationship("RunEvent", back_populates="run", cascade="all, delete-orphan")
+    

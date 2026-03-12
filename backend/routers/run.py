@@ -66,7 +66,7 @@ from backend.schemas.run import (
     OnboardStudentsResponse,
     OnboardStudentItem,
     RunOccupancySummaryResponse,
-    RunStateOut,
+    RunStateOut,RunCompleteOut,
 )
 router = APIRouter(prefix="/runs", tags=["Runs"])
 
@@ -518,6 +518,14 @@ def arrive_at_stop(
 
     if not run:                                     # If run does not exist
         raise HTTPException(status_code=404, detail="Run not found")
+    # -------------------------------------------------------------------------
+    # Prevent changes after run completion
+    # -------------------------------------------------------------------------
+    if run.is_completed:  # Completed runs are read-only
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Run is already completed",
+        )
 
     if run.end_time is not None:                    # If run already ended
         raise HTTPException(status_code=400, detail="Run has already ended")
@@ -660,6 +668,14 @@ def pickup_student(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Run not found",
         )
+    # -------------------------------------------------------------------------
+    # Prevent changes after run completion
+    # -------------------------------------------------------------------------
+    if run.is_completed:  # Completed runs are read-only
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Run is already completed",
+        )
 
     # -------------------------------------------------------------------------
     # Ensure the run is active
@@ -796,6 +812,14 @@ def dropoff_student(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Run is not active",
         )
+    # -------------------------------------------------------------------------
+    # Prevent changes after run completion
+    # -------------------------------------------------------------------------
+    if run.is_completed:  # Completed runs are read-only
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Run is already completed",
+        )
 
     # -------------------------------------------------------------------------
     # Ensure the run is currently positioned at a stop
@@ -881,6 +905,56 @@ def dropoff_student(
         dropped_off=assignment.dropped_off,
         is_onboard=assignment.is_onboard,
         dropped_off_at=assignment.dropped_off_at,
+    )
+
+# -----------------------------------------------------------
+# - Complete Run
+# - Mark a run as finished and lock further action updates
+# -----------------------------------------------------------
+@router.post("/{run_id}/complete", response_model=RunCompleteOut)
+def complete_run(run_id: int, db: Session = Depends(get_db)):
+    # -------------------------------------------------------------------------
+    # Load run
+    # -------------------------------------------------------------------------
+    run = db.get(run_model.Run, run_id)  # Load run by ID
+    if not run:  # Run must exist
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Run not found",
+        )
+    # -------------------------------------------------------------------------
+    # Prevent duplicate completion
+    # -------------------------------------------------------------------------
+    if run.is_completed:  # Run already finished
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Run is already completed",
+        )
+
+    # -------------------------------------------------------------------------
+    # Mark completion fields
+    # -------------------------------------------------------------------------
+    now = datetime.now(timezone.utc)  # Current UTC completion timestamp
+
+    run.is_completed = True  # Lock run from further action updates
+    run.completed_at = now  # Store completion time
+    run.end_time = now  # Also close the run's end_time for summary/report use
+
+    # -------------------------------------------------------------------------
+    # Save changes
+    # -------------------------------------------------------------------------
+    db.add(run)  # Track updated run
+    db.commit()  # Persist completion state
+    db.refresh(run)  # Reload final values
+
+    # -------------------------------------------------------------------------
+    # Return confirmation
+    # -------------------------------------------------------------------------
+    return RunCompleteOut(
+        id=run.id,
+        is_completed=run.is_completed,
+        completed_at=run.completed_at,
+        message="Run completed successfully",
     )
 
 # -----------------------------------------------------------

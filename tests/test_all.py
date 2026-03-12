@@ -1928,3 +1928,70 @@ def test_run_replay(client):
     assert data["events"][1]["onboard_count"] == 1
     assert data["events"][2]["onboard_count"] == 1
     assert data["events"][3]["onboard_count"] == 0
+
+# ============================================================
+# Test Run Completion
+# - verifies run can be completed and actions are locked
+# ============================================================
+
+def test_run_complete(client):
+
+    # -------------------------------------------------------
+    # Create driver
+    # -------------------------------------------------------
+    driver = client.post(
+        "/drivers/",
+        json={
+            "name": "Complete Driver",
+            "email": "complete@driver.com",
+            "phone": "5556667777",
+        },
+    )
+    driver_id = driver.json()["id"]
+
+    # -------------------------------------------------------
+    # Create route
+    # -------------------------------------------------------
+    route = client.post(
+        "/routes/",
+        json={
+            "route_number": "COMP-1",
+            "unit_number": "Bus-COMP",
+            "driver_id": driver_id,
+        },
+    )
+    route_id = route.json()["id"]
+
+    # -------------------------------------------------------
+    # Create run
+    # -------------------------------------------------------
+    run = client.post(
+        "/runs/",
+        json={
+            "driver_id": driver_id,
+            "route_id": route_id,
+            "run_type": "AM",
+        },
+    )
+    run_id = run.json()["id"]
+
+    # -------------------------------------------------------
+    # Complete run
+    # -------------------------------------------------------
+    response = client.post(f"/runs/{run_id}/complete")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["is_completed"] is True
+    assert data["completed_at"] is not None
+    assert data["message"] == "Run completed successfully"
+
+    # -------------------------------------------------------
+    # Attempt mutation after completion
+    # -------------------------------------------------------
+    blocked = client.post(f"/runs/{run_id}/arrive_stop?stop_sequence=1")
+
+    assert blocked.status_code == 400
+    assert blocked.json()["detail"] == "Run is already completed"

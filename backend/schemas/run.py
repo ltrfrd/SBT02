@@ -182,18 +182,29 @@ class RunStateOut(BaseModel):
     remaining_dropoffs: int  # Students picked up but not yet dropped off
 
 # -----------------------------------------------------------
+# Run Completion Output
+# - Returned when a run is marked complete
+# -----------------------------------------------------------
+
+class RunCompleteOut(BaseModel):
+    id: int
+    is_completed: bool
+    completed_at: datetime | None = None
+    message: str
+
+# -----------------------------------------------------------
 # Run timeline event output
 # - One row per logged ARRIVE / PICKUP / DROPOFF event
 # -----------------------------------------------------------
 class RunEventOut(BaseModel):
-    id: int                                                              # Event ID
-    run_id: int                                                          # Parent run
-    stop_id: int | None = None                                           # Stop involved in the event
-    student_id: int | None = None                                        # Student involved in the event
-    event_type: str                                                      # ARRIVE | PICKUP | DROPOFF
-    timestamp: datetime                                                  # Event timestamp
+    id: int                                        # Event ID
+    run_id: int                                    # Parent run
+    stop_id: int | None = None                     # Stop involved in the event
+    student_id: int | None = None                  # Student involved in the event
+    event_type: str                                # ARRIVE | PICKUP | DROPOFF
+    timestamp: datetime                            # Event timestamp
 
-    model_config = ConfigDict(from_attributes=True)                      # Enable ORM -> schema conversion
+    model_config = ConfigDict(from_attributes=True) # Enable ORM -> schema conversion
 
 
 # -----------------------------------------------------------
