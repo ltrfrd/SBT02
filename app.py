@@ -39,13 +39,13 @@ from backend.models import (                # Import model modules for ORM bindi
 # ---------- ROUTERS ----------
 # Import each router module (each exposes a .router object)
 from backend.routers import (
-    driver, school, student, route, stop, run, dispatch, report, student_run_assignment, student_bus_absence
+    driver, school, student, route, stop, run, dispatch, attendance, student_run_assignment, student_bus_absence
 )
 
 # ---------- UTILS ----------
 # Custom utilities: GPS tools and authentication helpers
 from backend.utils import gps_tools
-from backend.utils import report_generator
+from backend.utils import attendance_generator
 from backend.utils.auth import get_current_driver, login_driver, logout_driver
 
 # ---------- WEBSOCKET TRACKING ----------
@@ -91,7 +91,7 @@ app.include_router(route.router)
 app.include_router(stop.router)
 app.include_router(run.router)
 app.include_router(dispatch.router)
-app.include_router(report.router)
+app.include_router(attendance.router)
 app.include_router(student_run_assignment.router)
 app.include_router(student_bus_absence.router)
 
@@ -169,12 +169,12 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 
 # -----------------------------------------------------------
-# ROUTE REPORT PAGE
+# ROUTE ATTENDANCE PAGE
 # -----------------------------------------------------------
 @app.get("/route_report/{route_id}", response_class=HTMLResponse)
 def route_report(route_id: int, request: Request, db: Session = Depends(get_db)):
-    """Shows route-specific report including driver name and route details."""
-    route_data = report_generator.route_summary(db, route_id)
+    """Shows route-specific attendance summary including driver name and route details."""
+    route_data = attendance_generator.route_summary(db, route_id)
     if "error" in route_data:
         raise HTTPException(status_code=404, detail=route_data["error"])
 
@@ -238,11 +238,11 @@ def driver_run_view(
 
 
 # -----------------------------------------------------------
-# PAYROLL SUMMARY REPORT
+# PAYROLL ATTENDANCE SUMMARY PAGE
 # -----------------------------------------------------------
 @app.get("/summary_report", response_class=HTMLResponse)
 def summary_report(request: Request, start: date = None, end: date = None, db: Session = Depends(get_db)):
-    """Shows payroll summary between given dates."""
+    """Shows payroll attendance summary between given dates."""
     end = end or date.today()
     start = start or end
     records = db.query(dispatch_model.Payroll).filter(

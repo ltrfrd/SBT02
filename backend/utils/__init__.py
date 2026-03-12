@@ -4,10 +4,11 @@
 # Re-exports utility modules for clean imports
 # ===========================================================
 
-from .report_generator import (
+from .attendance_generator import (
     driver_summary,
     route_summary,
     payroll_summary,
+    generate_attendance,
     generate_report,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "driver_summary",
     "route_summary",
     "payroll_summary",
+    "generate_attendance",
     "generate_report",
 ]
